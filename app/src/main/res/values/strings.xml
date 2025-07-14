@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">My Application</string>
+    <string name="api_base_url">https://go.bkk.hu/api/</string>
+</resources>
