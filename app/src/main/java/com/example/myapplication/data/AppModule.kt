@@ -7,6 +7,8 @@ import com.example.myapplication.R
 import com.example.myapplication.data.api.BkkApiService
 import com.example.myapplication.data.db.BkkDatabase
 import com.example.myapplication.data.db.dao.TimetableDao
+import com.example.myapplication.data.db.repo.AuthRepo
+import com.example.myapplication.data.db.repo.ProdAuthRepo
 import com.example.myapplication.data.db.repo.ProdTimetableRepo
 import com.example.myapplication.data.db.repo.ProdVehicleRepo
 import com.example.myapplication.data.db.repo.TimetableRepo
@@ -45,6 +47,11 @@ object AppModule {
     @Singleton
     fun provideVehicleRepo(database: BkkDatabase, apiService: BkkApiService): VehicleRepo {
         return ProdVehicleRepo(database.vehicleDao, apiService)
+    }
+    @Provides
+    @Singleton
+    fun provideAuthRepo(@ApplicationContext context: Context): AuthRepo {
+        return ProdAuthRepo(context)
     }
     // BKK Futár API
     @Provides

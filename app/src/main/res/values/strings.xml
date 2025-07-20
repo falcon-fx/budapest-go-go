@@ -1,4 +1,11 @@
 <resources>
-    <string name="app_name">My Application</string>
+    <string name="app_name">Budapest GO GO</string>
     <string name="api_base_url">https://go.bkk.hu/api/</string>
+    <string name="textedit_apikey_hint">Your API key</string>
+    <string name="button_enter_apikey">Proceed</string>
+    <string name="menu_map">Map</string>
+    <string name="menu_routes">Routes</string>
+    <string name="menu_notices">Notices</string>
+    <string name="menu_settings">Settings</string>
+    <string name="button_fetch_timetable">Fetch</string>
 </resources>

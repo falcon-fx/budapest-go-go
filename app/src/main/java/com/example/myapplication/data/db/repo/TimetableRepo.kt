@@ -5,13 +5,15 @@ import com.example.myapplication.data.db.RouteTypes
 import com.example.myapplication.data.db.StopEntity
 import com.example.myapplication.data.db.TimetableEntity
 import com.example.myapplication.data.db.TripEntity
+import java.io.File
 
 interface TimetableRepo {
-    suspend fun fetchAndStoreTimetable(apiKey: String = "")
-    suspend fun getStopsOfRoute(routeId: String, orderBySequence: Boolean, reverse: Boolean): List<StopEntity>
-    suspend fun getCurrentStopOfVehicle(vehicleId: String): StopEntity
+    suspend fun fetchAndStoreTimetable(cacheDir: File)
+    suspend fun getStopsOfRoute(routeId: String, reverse: Boolean): List<StopEntity>
+    suspend fun getAllRoutes(): List<RouteEntity>
+    suspend fun getStopById(stopId: String): StopEntity
     suspend fun getRouteById(routeId: String): RouteEntity
     suspend fun getTripByRouteId(routeId: String): TripEntity
-    suspend fun getTimesForRoute(routeId: String): List<TimetableEntity>
+    suspend fun getTimesForRoute(routeId: String, reverse: Boolean): List<TimetableEntity>
     suspend fun getTypeOfRoute(routeId: String): RouteTypes
 }

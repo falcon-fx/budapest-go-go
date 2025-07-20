@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/mobile_navgraph"
+    app:startDestination="@id/nav_auth">
+
+    <fragment
+        android:id="@+id/nav_auth"
+        android:name="com.example.myapplication.ui.auth.AuthFragment"
+        android:label="AuthFragment"
+        tools:layout="@layout/fragment_auth">
+        <action
+            android:id="@+id/action_nav_auth_to_nav_map"
+            app:destination="@id/nav_map" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/nav_map"
+        android:name="com.example.myapplication.ui.map.MapFragment"
+        android:label="MapFragment"
+        tools:layout="@layout/fragment_map">
+    </fragment>
+
+</navigation>

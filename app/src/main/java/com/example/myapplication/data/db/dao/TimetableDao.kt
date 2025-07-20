@@ -82,6 +82,11 @@ interface TimetableDao {
     suspend fun getStopsOfRouteDesc(routeId: String): List<StopEntity>
 
     @Query("""
+        SELECT * FROM routes ORDER BY type
+    """)
+    suspend fun getAllRoutes(): List<RouteEntity>
+
+    @Query("""
         SELECT * FROM stops
         WHERE id = (
             SELECT curr_stop_id FROM vehicle
@@ -92,12 +97,22 @@ interface TimetableDao {
     suspend fun getCurrentStopOfVehicle(vehicleId: String): StopEntity
 
     @Query("""
+        SELECT * FROM stops
+        WHERE id = :stopId
+        LIMIT 1
+    """)
+    suspend fun getStopById(stopId: String): StopEntity
+
+    @Query("""
         SELECT * FROM routes WHERE id = :routeId LIMIT 1
     """)
     suspend fun getRouteById(routeId: String): RouteEntity
 
     @Query("SELECT * FROM trips WHERE id = :tripId")
     suspend fun getTripById(tripId: String): TripEntity
+
+    @Query("SELECT * FROM trips WHERE route_id = :routeId")
+    suspend fun getTripByRouteId(routeId: String): TripEntity
 
     @Query("""
         SELECT timetable.* FROM timetable
