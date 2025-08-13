@@ -6,5 +6,6 @@ enum class RouteTypes(val typeInt: Int) {
     BUS(3),
     FERRY(4),
     TROLLEYBUS(11),
-    SUBURBANRAIL(109)
+    SUBURBANRAIL(109),
+    UNKNOWN(999)
 }

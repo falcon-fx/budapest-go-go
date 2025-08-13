@@ -1,6 +1,9 @@
 package com.example.myapplication.ui.map
 
+import android.app.ActivityManager
+import android.content.Context.ACTIVITY_SERVICE
 import android.util.Log
+import androidx.core.content.ContextCompat.getSystemService
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
@@ -21,6 +24,7 @@ class MapViewModel @Inject constructor(
     private val vehicles: VehicleRepo
 ): ViewModel() {
     val logTag = "MAPSCREEN"
+    private val batchSize = 5000
     enum class Screen { MAP, TIMETABLE }
     private val _currentScreen = MutableLiveData(Screen.MAP)
     val currentScreen: LiveData<Screen> = _currentScreen
@@ -32,7 +36,7 @@ class MapViewModel @Inject constructor(
     fun fetchTimetable(cacheDir: File) {
         viewModelScope.launch {
             _loading.value = true
-            val result = timetable.fetchAndStoreTimetable(cacheDir)
+            timetable.fetchAndStoreTimetable(cacheDir, batchSize)
             _loading.value = false
         }
     }

@@ -1,5 +1,6 @@
 package com.example.myapplication.data.db.repo
 
+import android.util.Log
 import com.example.myapplication.data.api.BkkApiService
 import com.example.myapplication.data.db.RouteEntity
 import com.example.myapplication.data.db.RouteTypes
@@ -10,35 +11,206 @@ import com.example.myapplication.data.db.dao.TimetableDao
 import com.example.myapplication.data.util.DataParsers
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.ResponseBody
 import java.io.File
+import java.io.FileOutputStream
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
 
 class ProdTimetableRepo(
     private val timetableDao: TimetableDao,
     private val apiService: BkkApiService
 ): TimetableRepo {
-    override suspend fun fetchAndStoreTimetable(cacheDir: File) {
-        val routesParser: suspend (List<String>) -> Unit = { lines ->
-            timetableDao.replaceRoutes(DataParsers.parseRoutes(lines))
+    private val LOGTAG = "ProdTimetableRepo"
+    
+    private suspend fun replaceStopsInBatches(lines: Sequence<String>, batchSize: Int) {
+        withContext(Dispatchers.IO) {
+            timetableDao.deleteStops()
+            val iterator = lines.iterator()
+            if (!iterator.hasNext()) return@withContext
+            val header = DataParsers.parseCsvLine(iterator.next())
+            val columnIndex = header.withIndex().associate { it.value to it.index }
+            
+            val batch = mutableListOf<StopEntity>()
+            
+            for (line in iterator.asSequence()) {
+                val tokens = DataParsers.parseCsvLine(line)
+                if (tokens.isEmpty()) continue
+                
+                try {
+                    batch += StopEntity(
+                        id = tokens[columnIndex["stop_id"] ?: continue],
+                        name = tokens[columnIndex["stop_name"] ?: continue],
+                        lat = tokens[columnIndex["stop_lat"] ?: continue].toDouble(),
+                        lon = tokens[columnIndex["stop_lon"] ?: continue].toDouble()
+                    )
+                } catch (e: Exception) {
+                    Log.w(LOGTAG, "Stops: Skip malformed line: $e")
+                }
+                
+                if (batch.size >= batchSize) {
+                    timetableDao.insertStops(batch)
+                    batch.clear()
+                }
+            }
+            
+            if (batch.isNotEmpty()) {
+                timetableDao.insertStops(batch)
+                batch.clear()
+            }
         }
-        val stopsParser: suspend (List<String>) -> Unit = { lines ->
-            timetableDao.replaceStops(DataParsers.parseStops(lines))
+    }
+
+    private suspend fun replaceRoutesInBatches(lines: Sequence<String>, batchSize: Int) {
+        withContext(Dispatchers.IO) {
+            timetableDao.deleteRoutes()
+            val iterator = lines.iterator()
+            if (!iterator.hasNext()) return@withContext
+            val header = DataParsers.parseCsvLine(iterator.next())
+            val columnIndex = header.withIndex().associate { it.value to it.index }
+
+            val batch = mutableListOf<RouteEntity>()
+
+            for (line in iterator.asSequence()) {
+                val tokens = DataParsers.parseCsvLine(line)
+                if (tokens.isEmpty()) continue
+
+                try {
+                    batch += RouteEntity(
+                        id = tokens[columnIndex["route_id"] ?: continue],
+                        shortName = tokens[columnIndex["route_short_name"] ?: continue],
+                        desc = tokens[columnIndex["route_desc"] ?: continue],
+                        type = RouteTypes.entries.first { it.typeInt == tokens[columnIndex["route_type"] ?: 999].toInt() },
+                        color = tokens[columnIndex["route_color"] ?: continue],
+                        textColor = tokens[columnIndex["route_text_color"] ?: continue],
+                    )
+                } catch (e: Exception) {
+                    Log.w(LOGTAG, "Routes: Skip malformed line: $e")
+                }
+
+                if (batch.size >= batchSize) {
+                    timetableDao.insertRoutes(batch)
+                    batch.clear()
+                }
+            }
+
+            if (batch.isNotEmpty()) {
+                timetableDao.insertRoutes(batch)
+                batch.clear()
+            }
         }
-        val tripsParser: suspend (List<String>) -> Unit = { lines ->
-            timetableDao.replaceTrips(DataParsers.parseTrips(lines))
+    }
+
+    private suspend fun replaceTripsInBatches(lines: Sequence<String>, batchSize: Int) {
+        withContext(Dispatchers.IO) {
+            timetableDao.deleteTrips()
+            val iterator = lines.iterator()
+            if (!iterator.hasNext()) return@withContext
+            val header = DataParsers.parseCsvLine(iterator.next())
+            val columnIndex = header.withIndex().associate { it.value to it.index }
+
+            val batch = mutableListOf<TripEntity>()
+
+            for (line in iterator.asSequence()) {
+                val tokens = DataParsers.parseCsvLine(line)
+                if (tokens.isEmpty()) continue
+
+                try {
+                    batch += TripEntity(
+                        id = tokens[columnIndex["trip_id"] ?: continue],
+                        routeId = tokens[columnIndex["route_id"] ?: continue],
+                        headsign = tokens[columnIndex["trip_headsign"] ?: continue],
+                        directionId = tokens[columnIndex["direction_id"] ?: continue].toInt() == 0
+                    )
+                } catch (e: Exception) {
+                    Log.w(LOGTAG, "Trips: Skip malformed line: $e")
+                }
+
+                if (batch.size >= batchSize) {
+                    timetableDao.insertTrips(batch)
+                    batch.clear()
+                }
+            }
+
+            if (batch.isNotEmpty()) {
+                timetableDao.insertTrips(batch)
+                batch.clear()
+            }
         }
-        val timetableParser: suspend (List<String>) -> Unit = { lines ->
-            timetableDao.replaceTimetable(DataParsers.parseTimetable(lines))
+    }
+
+    private suspend fun replaceTimetableInBatches(lines: Sequence<String>, batchSize: Int) {
+        withContext(Dispatchers.IO) {
+            timetableDao.deleteTimetable()
+            val iterator = lines.iterator()
+            if (!iterator.hasNext()) return@withContext
+            val header = DataParsers.parseCsvLine(iterator.next())
+            val columnIndex = header.withIndex().associate { it.value to it.index }
+
+            val batch = mutableListOf<TimetableEntity>()
+
+            for (line in iterator.asSequence()) {
+                val tokens = DataParsers.parseCsvLine(line)
+                if (tokens.isEmpty()) continue
+
+                try {
+                    batch += TimetableEntity(
+                        tripId = tokens[columnIndex["trip_id"] ?: continue],
+                        stopId = tokens[columnIndex["stop_id"] ?: continue],
+                        arrTime = tokens[columnIndex["arrival_time"] ?: continue],
+                        depTime = tokens[columnIndex["departure_time"] ?: continue],
+                        stopSeq = tokens[columnIndex["stop_sequence"] ?: continue].toInt()
+                    )
+                } catch (e: Exception) {
+                    Log.w(LOGTAG, "Skip malformed line: $e")
+                }
+
+                if (batch.size >= batchSize) {
+                    timetableDao.insertTimetable(batch)
+                    Log.i(LOGTAG, "Inserted lines into Timetable")
+                    batch.clear()
+                }
+            }
+
+            if (batch.isNotEmpty()) {
+                timetableDao.insertTimetable(batch)
+                Log.i(LOGTAG, "Inserted lines into Timetable, last batch.")
+                batch.clear()
+            }
         }
-        val parserMap: Map<String, suspend (List<String>) -> Unit> = mapOf(
-            "routes.txt" to routesParser,
-            "stops.txt" to stopsParser,
-            "trips.txt" to tripsParser,
-            "stop_times.txt" to timetableParser
-        )
+    }
+
+    private suspend fun extractAndParseZip(
+        cacheDir: File,
+        zipResponseBody: ResponseBody,
+        batchSize: Int
+    ) {
+        ZipInputStream(zipResponseBody.byteStream()).use { zipInStream ->
+            var entry: ZipEntry?
+            while (zipInStream.nextEntry.also { entry = it } != null) {
+                val fileName = entry!!.name
+                val file = File(cacheDir, fileName).apply { parentFile?.mkdirs() }
+                FileOutputStream(file).use { fileOutStream ->
+                    zipInStream.copyTo(fileOutStream)
+                }
+                file.bufferedReader().useLines { lines ->
+                    Log.i(LOGTAG, "Reading $fileName")
+                    when (fileName) {
+                        "stops.txt" -> replaceStopsInBatches(lines, batchSize)
+                        "routes.txt" -> replaceRoutesInBatches(lines, batchSize)
+                        "trips.txt" -> replaceTripsInBatches(lines, batchSize)
+                        "stop_times.txt" -> replaceTimetableInBatches(lines, batchSize)
+                    }
+                }
+            }
+        }
+    }
+
+    override suspend fun fetchAndStoreTimetable(cacheDir: File, batchSize: Int) {
         val response = apiService.downloadTimetable()
         if (response.isSuccessful && response.body() != null) {
             withContext(Dispatchers.IO) {
-                DataParsers.extractAndParseZip(cacheDir, response.body()!!, parserMap)
+                extractAndParseZip(cacheDir, response.body()!!, batchSize)
             }
         }
     }

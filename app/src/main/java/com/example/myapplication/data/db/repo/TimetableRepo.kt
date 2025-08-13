@@ -8,7 +8,7 @@ import com.example.myapplication.data.db.TripEntity
 import java.io.File
 
 interface TimetableRepo {
-    suspend fun fetchAndStoreTimetable(cacheDir: File)
+    suspend fun fetchAndStoreTimetable(cacheDir: File, batchSize: Int)
     suspend fun getStopsOfRoute(routeId: String, reverse: Boolean): List<StopEntity>
     suspend fun getAllRoutes(): List<RouteEntity>
     suspend fun getStopById(stopId: String): StopEntity

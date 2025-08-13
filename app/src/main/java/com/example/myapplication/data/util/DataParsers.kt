@@ -1,6 +1,5 @@
 package com.example.myapplication.data.util
 
-import android.content.Context
 import android.util.Log
 import com.example.myapplication.data.db.RouteEntity
 import com.example.myapplication.data.db.RouteTypes
@@ -15,6 +14,7 @@ import java.io.FileOutputStream
 import java.io.InputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
+import kotlin.math.log
 
 object DataParsers {
     private val logTag = "DATAPARSERS"
@@ -42,38 +42,54 @@ object DataParsers {
         }
     }
 
-    suspend fun extractAndParseZip(
-        cacheDir: File,
-        zipResponseBody: ResponseBody,
-        parserMap: Map<String, suspend (List<String>) -> Unit>
-    ) {
-        val buffer = ByteArray(1024)
-        ZipInputStream(zipResponseBody.byteStream()).use { zipInStream ->
-            var entry: ZipEntry?
-            while (zipInStream.nextEntry.also { entry = it } != null) {
-                val fileName = entry!!.name
-                val file = File(cacheDir, fileName)
-                FileOutputStream(file).use { fileOutStream ->
-                    var len: Int
-                    while (zipInStream.read(buffer).also { len = it } > 0) {
-                        fileOutStream.write(buffer, 0, len)
-                    }
-                }
-                val lines = file.readLines()
-                Log.i(logTag, "Reading $fileName, $lines")
-                parserMap[fileName]?.invoke(lines)
-            }
-        }
-    }
+
 
     // Parser helpers
-    fun parseStops(lines: List<String>): List<StopEntity> {
-        if (lines.isEmpty()) return emptyList()
+    fun parseCsvLine(line: String): List<String> {
+        val result = mutableListOf<String>()
+        val current = StringBuilder()
+        var inQuotes = false
+        var i = 0
 
-        val cols = lines[0].split(",")
+        fun flushField() {
+            result.add(current.toString())
+            current.clear()
+        }
+
+        while (i < line.length) {
+
+            when (val currChar = line[i]) {
+                '"' -> {
+                    if(inQuotes && i + 1 < line.length && line[i + 1] == '"') {
+                        current.append('"')
+                        i++
+                    } else {
+                        inQuotes = !inQuotes
+                    }
+                }
+                ',' -> if (!inQuotes) {
+                    flushField()
+                }
+                else -> current.append(currChar)
+            }
+            i++
+        }
+        if(inQuotes) {
+            Log.w(logTag, "parseCsvLine: malformed CSV, unterminated quote in $line")
+            return emptyList()
+        }
+        flushField()
+        return result
+    }
+
+    fun parseStops(lines: Sequence<String>): List<StopEntity> {
+        val iterator = lines.iterator()
+        if (!iterator.hasNext()) return emptyList()
+
+        val cols = parseCsvLine(iterator.next())
         val colIndex = cols.withIndex().associate { it.value to it.index }
-        return lines.drop(1).mapNotNull { line ->
-            val tokens = line.split(",")
+        return iterator.asSequence().mapNotNull { line ->
+            val tokens = parseCsvLine(line)
             try {
                 StopEntity(
                     id = tokens[colIndex["stop_id"] ?: return@mapNotNull null],
@@ -85,16 +101,17 @@ object DataParsers {
                 Log.i(logTag, "parseStops exception: $e")
                 null
             }
-        }
+        }.toList()
     }
 
-    fun parseRoutes(lines: List<String>): List<RouteEntity> {
-        if (lines.isEmpty()) return emptyList()
+    fun parseRoutes(lines: Sequence<String>): List<RouteEntity> {
+        val iterator = lines.iterator()
+        if (!iterator.hasNext()) return emptyList()
 
-        val cols = lines[0].split(",")
+        val cols = parseCsvLine(iterator.next())
         val colIndex = cols.withIndex().associate { it.value to it.index }
-        return lines.drop(1).mapNotNull { line ->
-            val tokens = line.split(",")
+        return iterator.asSequence().mapNotNull { line ->
+            val tokens = parseCsvLine(line)
             try {
                 RouteEntity(
                     id = tokens[colIndex["route_id"] ?: return@mapNotNull null],
@@ -110,16 +127,17 @@ object DataParsers {
                 Log.i(logTag, "parseRoutes exception: $e")
                 null
             }
-        }
+        }.toList()
     }
 
-    fun parseTrips(lines: List<String>): List<TripEntity> {
-        if (lines.isEmpty()) return emptyList()
+    fun parseTrips(lines: Sequence<String>): List<TripEntity> {
+        val iterator = lines.iterator()
+        if (!iterator.hasNext()) return emptyList()
 
-        val cols = lines[0].split(",")
+        val cols = parseCsvLine(iterator.next())
         val colIndex = cols.withIndex().associate { it.value to it.index }
-        return lines.drop(1).mapNotNull { line ->
-            val tokens = line.split(",")
+        return iterator.asSequence().mapNotNull { line ->
+            val tokens = parseCsvLine(line)
             try {
                 TripEntity(
                     id = tokens[colIndex["trip_id"] ?: return@mapNotNull null],
@@ -131,16 +149,17 @@ object DataParsers {
                 Log.i(logTag, "parseTrips exception: $e")
                 null
             }
-        }
+        }.toList()
     }
 
-    fun parseTimetable(lines: List<String>): List<TimetableEntity> {
-        if (lines.isEmpty()) return emptyList()
+    fun parseTimetable(lines: Sequence<String>): List<TimetableEntity> {
+        val iterator = lines.iterator()
+        if (!iterator.hasNext()) return emptyList()
 
-        val cols = lines[0].split(",")
+        val cols = parseCsvLine(iterator.next())
         val colIndex = cols.withIndex().associate { it.value to it.index }
-        return lines.drop(1).mapNotNull { line ->
-            val tokens = line.split(",")
+        return iterator.asSequence().mapNotNull { line ->
+            val tokens = parseCsvLine(line)
             try {
                 TimetableEntity(
                     tripId = tokens[colIndex["trip_id"] ?: return@mapNotNull null],
@@ -153,6 +172,6 @@ object DataParsers {
                 Log.i(logTag, "parseTimetable exception: $e")
                 null
             }
-        }
+        }.toList()
     }
 }
