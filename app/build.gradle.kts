@@ -1,3 +1,6 @@
+import org.gradle.api.tasks.Exec
+import java.io.File
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -45,6 +48,29 @@ android {
     }
 }
 
+tasks.register<Exec>("installPassport") {
+    val deviceIP = "169.254.22.29:5555"
+    group = "deployment"
+    description = "Assemble debug APK and install to BB10 Passport at $deviceIP"
+    dependsOn("assembleDebug")
+
+
+    doFirst {
+        val sdk = System.getenv("ANDROID_SDK_ROOT") ?: System.getenv("ANDROID_HOME")
+        val adb = if (sdk != null) "$sdk/platform-tools/adb" else "adb"
+
+        val apkFile = layout.buildDirectory.file("outputs/apk/debug/app-debug.apk").get().asFile
+        if (!apkFile.exists()) {
+            throw GradleException("APK not found: ${apkFile.absolutePath}. Check variant or build outputs.")
+        }
+        commandLine = listOf(adb, "-s", deviceIP, "install", "-r", apkFile.absolutePath)
+    }
+
+    doLast {
+        println("Installed app to $deviceIP")
+    }
+}
+
 dependencies {
 
     implementation(libs.androidx.core.ktx)
@@ -75,3 +101,4 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 }
+
