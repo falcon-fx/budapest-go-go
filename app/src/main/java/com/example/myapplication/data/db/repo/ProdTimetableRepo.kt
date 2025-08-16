@@ -2,6 +2,7 @@ package com.example.myapplication.data.db.repo
 
 import android.util.Log
 import com.example.myapplication.data.api.BkkApiService
+import com.example.myapplication.data.db.BkkDatabase
 import com.example.myapplication.data.db.RouteEntity
 import com.example.myapplication.data.db.RouteTypes
 import com.example.myapplication.data.db.StopEntity
@@ -12,7 +13,9 @@ import com.example.myapplication.data.util.DataParsers
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.ResponseBody
+import java.io.BufferedInputStream
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
@@ -180,30 +183,95 @@ class ProdTimetableRepo(
         }
     }
 
+    private suspend fun saveResponseBodyToFile(responseBody: ResponseBody, dest: File) {
+        withContext(Dispatchers.IO) {
+            dest.parentFile?.mkdirs()
+
+            val tmp = File(dest.parentFile, dest.name + ".tmp")
+            if (tmp.exists()) tmp.delete()
+
+            responseBody.byteStream().use { inputStream ->
+                BufferedInputStream(inputStream).use { bufferedInStream ->
+                    FileOutputStream(tmp).use { fileOutStream ->
+                        val buffer = ByteArray(8 * 1024)
+                        var read: Int
+                        while (bufferedInStream.read(buffer).also { read = it } != -1) {
+                            fileOutStream.write(buffer, 0, read)
+                        }
+                        try {
+                            fileOutStream.fd.sync()
+                        } catch (_: Throwable) {  }
+                    }
+                }
+            }
+
+            if (!tmp.renameTo(dest)) {
+                tmp.copyTo(dest, overwrite = true)
+                tmp.delete()
+                if (!dest.exists()) throw java.io.IOException("Failed to move temp file ${tmp.path} -> ${dest.path}")
+            }
+        }
+    }
+
     private suspend fun extractAndParseZip(
         cacheDir: File,
         zipResponseBody: ResponseBody,
         batchSize: Int
     ) {
-        ZipInputStream(zipResponseBody.byteStream()).use { zipInStream ->
-            var entry: ZipEntry?
-            while (zipInStream.nextEntry.also { entry = it } != null) {
-                val fileName = entry!!.name
-                val file = File(cacheDir, fileName).apply { parentFile?.mkdirs() }
-                FileOutputStream(file).use { fileOutStream ->
-                    zipInStream.copyTo(fileOutStream)
-                }
-                file.bufferedReader().useLines { lines ->
-                    Log.i(LOGTAG, "Reading $fileName")
-                    when (fileName) {
-                        "stops.txt" -> replaceStopsInBatches(lines, batchSize)
-                        "routes.txt" -> replaceRoutesInBatches(lines, batchSize)
-                        "trips.txt" -> replaceTripsInBatches(lines, batchSize)
-                        "stop_times.txt" -> replaceTimetableInBatches(lines, batchSize)
+
+        val zipFile = File(cacheDir, "timetable.zip").apply { parentFile?.mkdirs() }
+
+
+        try {
+            saveResponseBodyToFile(zipResponseBody, zipFile)
+
+            Log.i(LOGTAG, "Saved zip to ${zipFile.path}, size=${zipFile.length()}")
+            if (!zipFile.exists() || zipFile.length() == 0L) {
+                throw java.io.IOException("Saved zip file is empty or missing")
+            }
+            withContext(Dispatchers.IO) {
+                ZipInputStream(FileInputStream(zipFile)).use { zipInStream ->
+                    var entry: ZipEntry?
+                    while (zipInStream.nextEntry.also { entry = it } != null) {
+                        val fileName = entry!!.name
+                        Log.i(LOGTAG, "Extracting $fileName")
+                        val file = File(cacheDir, fileName).apply { parentFile?.mkdirs() }
+                        FileOutputStream(file).use { fileOutStream ->
+                            val buf = ByteArray(8 * 1024)
+                            var len: Int
+                            while (zipInStream.read(buf).also { len = it } > 0) {
+                                fileOutStream.write(buf, 0, len)
+                            }
+                            try {
+                                fileOutStream.fd.sync()
+                            } catch (_: Throwable) {
+                            }
+                        }
+                        zipInStream.closeEntry()
+
+                        file.bufferedReader().useLines { lines ->
+                            Log.i(LOGTAG, "Reading $fileName")
+                            when (fileName) {
+                                "stops.txt" -> replaceStopsInBatches(lines, batchSize)
+                                "routes.txt" -> replaceRoutesInBatches(lines, batchSize)
+                                "trips.txt" -> replaceTripsInBatches(lines, batchSize)
+                                "stop_times.txt" -> replaceTimetableInBatches(lines, batchSize)
+                                else -> {
+                                    Log.i(LOGTAG, "Skipping $fileName")
+                                }
+                            }
+                        }
                     }
                 }
             }
+        } catch(e: java.io.IOException) {
+            Log.e(LOGTAG, "IO error while downloading/parsing: ${e.message}", e)
+            try { zipFile.delete() } catch (_: Throwable) {}
+            throw e
+        } finally {
+            try { zipResponseBody.close() } catch (_: Throwable) {}
         }
+
     }
 
     override suspend fun fetchAndStoreTimetable(cacheDir: File, batchSize: Int) {
