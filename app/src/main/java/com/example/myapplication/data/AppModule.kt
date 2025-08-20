@@ -128,7 +128,7 @@ object AppModule {
     @Provides
     @Singleton
     fun provideTimetableRepo(database: BkkDatabase, apiService: BkkApiService): TimetableRepo {
-        return ProdTimetableRepo(database.timetableDao, apiService)
+        return ProdTimetableRepo(apiService, database)
     }
     @Provides
     @Singleton

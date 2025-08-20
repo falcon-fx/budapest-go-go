@@ -1,6 +1,7 @@
 package com.example.myapplication.data.db.repo
 
 import android.util.Log
+import androidx.room.withTransaction
 import com.example.myapplication.data.api.BkkApiService
 import com.example.myapplication.data.db.BkkDatabase
 import com.example.myapplication.data.db.RouteEntity
@@ -11,6 +12,8 @@ import com.example.myapplication.data.db.TripEntity
 import com.example.myapplication.data.db.dao.TimetableDao
 import com.example.myapplication.data.util.DataParsers
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.ResponseBody
 import java.io.BufferedInputStream
@@ -21,19 +24,19 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 
 class ProdTimetableRepo(
-    private val timetableDao: TimetableDao,
-    private val apiService: BkkApiService
+    private val apiService: BkkApiService,
+    private val bkkDatabase: BkkDatabase
 ): TimetableRepo {
     private val LOGTAG = "ProdTimetableRepo"
+    private val dbWriteMutex = Mutex()
     
     private suspend fun replaceStopsInBatches(lines: Sequence<String>, batchSize: Int) {
         withContext(Dispatchers.IO) {
-            timetableDao.deleteStops()
             val iterator = lines.iterator()
             if (!iterator.hasNext()) return@withContext
             val header = DataParsers.parseCsvLine(iterator.next())
             val columnIndex = header.withIndex().associate { it.value to it.index }
-            
+            var numOfBatches = 0
             val batch = mutableListOf<StopEntity>()
             
             for (line in iterator.asSequence()) {
@@ -52,13 +55,17 @@ class ProdTimetableRepo(
                 }
                 
                 if (batch.size >= batchSize) {
-                    timetableDao.insertStops(batch)
+                    bkkDatabase.timetableDao.insertStops(batch)
+                    ++numOfBatches
+                    Log.i(LOGTAG, "Inserted lines into Stops, $numOfBatches")
                     batch.clear()
                 }
             }
             
             if (batch.isNotEmpty()) {
-                timetableDao.insertStops(batch)
+                bkkDatabase.timetableDao.insertStops(batch)
+                ++numOfBatches
+                Log.i(LOGTAG, "Inserted final lines into Stops, $numOfBatches")
                 batch.clear()
             }
         }
@@ -66,12 +73,11 @@ class ProdTimetableRepo(
 
     private suspend fun replaceRoutesInBatches(lines: Sequence<String>, batchSize: Int) {
         withContext(Dispatchers.IO) {
-            timetableDao.deleteRoutes()
             val iterator = lines.iterator()
             if (!iterator.hasNext()) return@withContext
             val header = DataParsers.parseCsvLine(iterator.next())
             val columnIndex = header.withIndex().associate { it.value to it.index }
-
+            var numOfBatches = 0
             val batch = mutableListOf<RouteEntity>()
 
             for (line in iterator.asSequence()) {
@@ -92,13 +98,18 @@ class ProdTimetableRepo(
                 }
 
                 if (batch.size >= batchSize) {
-                    timetableDao.insertRoutes(batch)
+
+                    bkkDatabase.timetableDao.insertRoutes(batch)
+                    ++numOfBatches
+                    Log.i(LOGTAG, "Inserted lines into Routes, $numOfBatches")
                     batch.clear()
                 }
             }
 
             if (batch.isNotEmpty()) {
-                timetableDao.insertRoutes(batch)
+                bkkDatabase.timetableDao.insertRoutes(batch)
+                ++numOfBatches
+                Log.i(LOGTAG, "Inserted final lines into Routes, $numOfBatches")
                 batch.clear()
             }
         }
@@ -106,12 +117,11 @@ class ProdTimetableRepo(
 
     private suspend fun replaceTripsInBatches(lines: Sequence<String>, batchSize: Int) {
         withContext(Dispatchers.IO) {
-            timetableDao.deleteTrips()
             val iterator = lines.iterator()
             if (!iterator.hasNext()) return@withContext
             val header = DataParsers.parseCsvLine(iterator.next())
             val columnIndex = header.withIndex().associate { it.value to it.index }
-
+            var numOfBatches = 0
             val batch = mutableListOf<TripEntity>()
 
             for (line in iterator.asSequence()) {
@@ -130,13 +140,18 @@ class ProdTimetableRepo(
                 }
 
                 if (batch.size >= batchSize) {
-                    timetableDao.insertTrips(batch)
+
+                    bkkDatabase.timetableDao.insertTrips(batch)
+                    ++numOfBatches
+                    Log.i(LOGTAG, "Inserted lines into Trips, $numOfBatches")
                     batch.clear()
                 }
             }
 
             if (batch.isNotEmpty()) {
-                timetableDao.insertTrips(batch)
+                bkkDatabase.timetableDao.insertTrips(batch)
+                ++numOfBatches
+                Log.i(LOGTAG, "Inserted final lines into Trips, $numOfBatches")
                 batch.clear()
             }
         }
@@ -144,8 +159,8 @@ class ProdTimetableRepo(
 
     private suspend fun replaceTimetableInBatches(lines: Sequence<String>, batchSize: Int) {
         withContext(Dispatchers.IO) {
-            timetableDao.deleteTimetable()
             val iterator = lines.iterator()
+            var numOfBatches = 0
             if (!iterator.hasNext()) return@withContext
             val header = DataParsers.parseCsvLine(iterator.next())
             val columnIndex = header.withIndex().associate { it.value to it.index }
@@ -169,15 +184,17 @@ class ProdTimetableRepo(
                 }
 
                 if (batch.size >= batchSize) {
-                    timetableDao.insertTimetable(batch)
-                    Log.i(LOGTAG, "Inserted lines into Timetable")
+                    bkkDatabase.timetableDao.insertTimetable(batch)
+                    ++numOfBatches
+                    Log.i(LOGTAG, "Inserted lines into Timetable, $numOfBatches")
                     batch.clear()
                 }
             }
 
             if (batch.isNotEmpty()) {
-                timetableDao.insertTimetable(batch)
-                Log.i(LOGTAG, "Inserted lines into Timetable, last batch.")
+                bkkDatabase.timetableDao.insertTimetable(batch)
+                ++numOfBatches
+                Log.i(LOGTAG, "Inserted final lines into Timetable, $numOfBatches")
                 batch.clear()
             }
         }
@@ -213,6 +230,7 @@ class ProdTimetableRepo(
         }
     }
 
+
     private suspend fun extractAndParseZip(
         cacheDir: File,
         zipResponseBody: ResponseBody,
@@ -223,42 +241,43 @@ class ProdTimetableRepo(
 
 
         try {
+            Log.i(LOGTAG, "Saving zip to ${zipFile.path}")
             saveResponseBodyToFile(zipResponseBody, zipFile)
 
             Log.i(LOGTAG, "Saved zip to ${zipFile.path}, size=${zipFile.length()}")
             if (!zipFile.exists() || zipFile.length() == 0L) {
                 throw java.io.IOException("Saved zip file is empty or missing")
             }
-            withContext(Dispatchers.IO) {
-                ZipInputStream(FileInputStream(zipFile)).use { zipInStream ->
-                    var entry: ZipEntry?
-                    while (zipInStream.nextEntry.also { entry = it } != null) {
-                        val fileName = entry!!.name
-                        Log.i(LOGTAG, "Extracting $fileName")
-                        val file = File(cacheDir, fileName).apply { parentFile?.mkdirs() }
-                        FileOutputStream(file).use { fileOutStream ->
-                            val buf = ByteArray(8 * 1024)
-                            var len: Int
-                            while (zipInStream.read(buf).also { len = it } > 0) {
-                                fileOutStream.write(buf, 0, len)
-                            }
-                            try {
-                                fileOutStream.fd.sync()
-                            } catch (_: Throwable) {
-                            }
-                        }
-                        zipInStream.closeEntry()
 
-                        file.bufferedReader().useLines { lines ->
-                            Log.i(LOGTAG, "Reading $fileName")
-                            when (fileName) {
-                                "stops.txt" -> replaceStopsInBatches(lines, batchSize)
-                                "routes.txt" -> replaceRoutesInBatches(lines, batchSize)
-                                "trips.txt" -> replaceTripsInBatches(lines, batchSize)
-                                "stop_times.txt" -> replaceTimetableInBatches(lines, batchSize)
-                                else -> {
-                                    Log.i(LOGTAG, "Skipping $fileName")
-                                }
+            ZipInputStream(FileInputStream(zipFile)).use { zipInStream ->
+                var entry: ZipEntry?
+                while (zipInStream.nextEntry.also { entry = it } != null) {
+                    val fileName = entry!!.name
+                    Log.i(LOGTAG, "Extracting $fileName")
+                    val file = File(cacheDir, fileName).apply { parentFile?.mkdirs() }
+                    FileOutputStream(file).use { fileOutStream ->
+                        val buf = ByteArray(8 * 1024)
+                        var len: Int
+                        while (zipInStream.read(buf).also { len = it } > 0) {
+                            fileOutStream.write(buf, 0, len)
+                        }
+                        try {
+                            fileOutStream.fd.sync()
+                        } catch (_: Throwable) {
+                        }
+                    }
+                    zipInStream.closeEntry()
+
+
+                    file.bufferedReader().useLines { lines ->
+                        Log.i(LOGTAG, "Reading $fileName")
+                        when (fileName) {
+                            "stops.txt" -> replaceStopsInBatches(lines, batchSize)
+                            "routes.txt" -> replaceRoutesInBatches(lines, batchSize)
+                            "trips.txt" -> replaceTripsInBatches(lines, batchSize)
+                            "stop_times.txt" -> replaceTimetableInBatches(lines, batchSize)
+                            else -> {
+                                Log.i(LOGTAG, "Skipping $fileName")
                             }
                         }
                     }
@@ -275,10 +294,19 @@ class ProdTimetableRepo(
     }
 
     override suspend fun fetchAndStoreTimetable(cacheDir: File, batchSize: Int) {
+
         val response = apiService.downloadTimetable()
         if (response.isSuccessful && response.body() != null) {
+
             withContext(Dispatchers.IO) {
-                extractAndParseZip(cacheDir, response.body()!!, batchSize)
+                dbWriteMutex.withLock {
+                    Log.i(LOGTAG, "Starting DB wipe")
+                    bkkDatabase.fastClearAll()
+                    Log.i(LOGTAG, "Wiped DB")
+                    extractAndParseZip(cacheDir, response.body()!!, batchSize)
+                }
+
+
             }
         }
     }
@@ -287,30 +315,30 @@ class ProdTimetableRepo(
         routeId: String,
         reverse: Boolean
     ): List<StopEntity> {
-        return if (reverse) timetableDao.getStopsOfRouteDesc(routeId) else timetableDao.getStopsOfRouteAsc(routeId)
+        return if (reverse) bkkDatabase.timetableDao.getStopsOfRouteDesc(routeId) else bkkDatabase.timetableDao.getStopsOfRouteAsc(routeId)
     }
 
     override suspend fun getAllRoutes(): List<RouteEntity> {
-        return timetableDao.getAllRoutes()
+        return bkkDatabase.timetableDao.getAllRoutes()
     }
 
     override suspend fun getStopById(stopId: String): StopEntity {
-        return timetableDao.getStopById(stopId)
+        return bkkDatabase.timetableDao.getStopById(stopId)
     }
 
     override suspend fun getRouteById(routeId: String): RouteEntity {
-        return timetableDao.getRouteById(routeId)
+        return bkkDatabase.timetableDao.getRouteById(routeId)
     }
 
     override suspend fun getTripByRouteId(routeId: String): TripEntity {
-        return timetableDao.getTripByRouteId(routeId)
+        return bkkDatabase.timetableDao.getTripByRouteId(routeId)
     }
 
     override suspend fun getTimesForRoute(routeId: String, reverse: Boolean): List<TimetableEntity> {
-        return if (reverse) timetableDao.getTimesForRouteDesc(routeId) else timetableDao.getTimesForRouteAsc(routeId)
+        return if (reverse) bkkDatabase.timetableDao.getTimesForRouteDesc(routeId) else bkkDatabase.timetableDao.getTimesForRouteAsc(routeId)
     }
 
     override suspend fun getTypeOfRoute(routeId: String): RouteTypes {
-        return timetableDao.getTypeOfRoute(routeId)
+        return bkkDatabase.timetableDao.getTypeOfRoute(routeId)
     }
 }

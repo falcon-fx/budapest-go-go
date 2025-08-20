@@ -24,7 +24,7 @@ class MapViewModel @Inject constructor(
     private val vehicles: VehicleRepo
 ): ViewModel() {
     val logTag = "MAPSCREEN"
-    private val batchSize = 5000
+    private val batchSize = 50000
     enum class Screen { MAP, TIMETABLE }
     private val _currentScreen = MutableLiveData(Screen.MAP)
     val currentScreen: LiveData<Screen> = _currentScreen
