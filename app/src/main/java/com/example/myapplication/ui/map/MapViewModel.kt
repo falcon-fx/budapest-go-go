@@ -8,6 +8,8 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.myapplication.data.db.RouteEntity
+import com.example.myapplication.data.db.StopEntity
 import com.example.myapplication.data.db.repo.AuthRepo
 import com.example.myapplication.data.db.repo.TimetableRepo
 import com.example.myapplication.data.db.repo.VehicleRepo
@@ -31,6 +33,9 @@ class MapViewModel @Inject constructor(
     private val _loading = MutableLiveData(false)
     val loading: LiveData<Boolean> = _loading
 
+    private val _routes = MutableLiveData<List<RouteEntity>>(emptyList())
+    val routes : LiveData<List<RouteEntity>> = _routes
+
     fun switchScreens(screen: Screen) { _currentScreen.value = screen }
 
     fun fetchTimetable(cacheDir: File) {
@@ -38,6 +43,7 @@ class MapViewModel @Inject constructor(
             _loading.value = true
             timetable.fetchAndStoreTimetable(cacheDir, batchSize)
             _loading.value = false
+            loadRoutes()
         }
     }
 
@@ -45,10 +51,11 @@ class MapViewModel @Inject constructor(
         viewModelScope.launch {
             Log.i(logTag, "loadRoutes called")
             val allRoutes = timetable.getAllRoutes()
-            Log.i(logTag, "allRoutes: ${allRoutes}")
-            for (route in allRoutes) {
-                Log.i(logTag, route.desc)
-            }
+            _routes.postValue(allRoutes)
         }
+    }
+
+    suspend fun getStopsOfRoute(routeId: String, reverse: Boolean): List<StopEntity> {
+        return timetable.getStopsOfRoute(routeId, reverse)
     }
 }

@@ -2,9 +2,62 @@
 
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/layout_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
+
+    <androidx.appcompat.widget.Toolbar
+        android:id="@+id/searchToolbar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/colorPrimary"
+        android:minHeight="?attr/actionBarSize"
+        android:theme="?attr/actionBarTheme"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:id="@+id/searchToolbarConstraintLayout">
+            <EditText
+                android:id="@+id/routesSearchBar"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:autofillHints=""
+                android:inputType="text"
+                android:hint="@string/textedit_findroute_hint"
+                app:layout_constraintStart_toStartOf="@id/searchToolbarConstraintLayout"
+                app:layout_constraintTop_toTopOf="@id/searchToolbarConstraintLayout"
+                app:layout_constraintBottom_toBottomOf="@id/searchToolbarConstraintLayout"
+                >
+
+            </EditText>
+            <ImageButton
+                android:id="@+id/btnSearch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="Fetch"
+                app:layout_constraintTop_toTopOf="@id/searchToolbarConstraintLayout"
+                app:layout_constraintBottom_toBottomOf="@id/searchToolbarConstraintLayout"
+                app:layout_constraintStart_toEndOf="@id/routesSearchBar"
+                android:src="@android:drawable/ic_menu_search"
+                android:background="#00000000"/>
+            <ImageButton
+                android:id="@+id/btnFetchTimetable"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="@string/button_routes_dropdown_menu"
+                android:src="@android:drawable/ic_menu_manage"
+                android:background="#00000000"
+                app:layout_constraintTop_toTopOf="@id/searchToolbarConstraintLayout"
+                app:layout_constraintBottom_toBottomOf="@id/searchToolbarConstraintLayout"
+                app:layout_constraintStart_toEndOf="@id/btnSearch"
+                android:layout_margin="5dp"/>
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+
+    </androidx.appcompat.widget.Toolbar>
 
     <ProgressBar
         android:layout_width="wrap_content"
@@ -16,16 +69,17 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
-
-    <Button
-        android:id="@+id/btnFetchTimetable"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginVertical="60dp"
-        android:layout_marginEnd="60dp"
-        android:text="@string/button_fetch_timetable"
-        app:iconTintMode="src_over"
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/transportLinesRecyclerView"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintTop_toBottomOf="@id/searchToolbar"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        android:scrollbars="vertical" />
+
+
+
 
 </androidx.constraintlayout.widget.ConstraintLayout>

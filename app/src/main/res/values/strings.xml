@@ -8,4 +8,6 @@
     <string name="menu_notices">Notices</string>
     <string name="menu_settings">Settings</string>
     <string name="button_fetch_timetable">Fetch</string>
+    <string name="button_routes_dropdown_menu">Options</string>
+    <string name="textedit_findroute_hint">Find your transport line</string>
 </resources>
