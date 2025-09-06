@@ -1,9 +1,11 @@
 package com.example.myapplication.data.util
 
+import android.graphics.Color
 import android.util.Log
 import com.example.myapplication.data.db.VehicleEntity
 import com.google.transit.realtime.GtfsRealtime
 import java.io.InputStream
+import androidx.core.graphics.toColorInt
 
 object DataParsers {
     private val logTag = "DATAPARSERS"
@@ -69,5 +71,16 @@ object DataParsers {
         }
         flushField()
         return result
+    }
+
+    fun parseStringToColor(hexValue: String, isOnColor: Boolean = false): Int {
+        val stringBuilder = StringBuilder(hexValue)
+        stringBuilder.insert(0, '#')
+        val parsedColor: Int = try {
+            stringBuilder.toString().toColorInt()
+        } catch(exc: IllegalArgumentException) {
+            if(isOnColor) Color.WHITE else Color.BLACK
+        }
+        return parsedColor
     }
 }

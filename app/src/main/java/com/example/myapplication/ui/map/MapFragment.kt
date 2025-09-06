@@ -7,19 +7,27 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
+import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView.LayoutManager
 import com.example.myapplication.R
 import com.example.myapplication.databinding.FragmentMapBinding
 import com.example.myapplication.databinding.LayoutMapBinding
 import com.example.myapplication.databinding.LayoutRoutesBinding
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @AndroidEntryPoint
-class MapFragment: Fragment() {
+class MapFragment: Fragment(), RoutesAdapter.ToggleListener {
+    private val LOGTAG = "MAP_FRAGMENT"
     private val viewModel: MapViewModel by viewModels()
     private var _binding: FragmentMapBinding? = null
     private val binding get() = _binding!!
     private lateinit var mapLayoutBinding: LayoutMapBinding
     private lateinit var routesLayoutBinding: LayoutRoutesBinding
+    private lateinit var routesAdapter: RoutesAdapter
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -40,8 +48,15 @@ class MapFragment: Fragment() {
         mapLayoutBinding = binding.mapLayout
         routesLayoutBinding = binding.routesLayout
 
+        setupRoutesRecyclerView()
+
         viewModel.loading.observe(viewLifecycleOwner) { isLoading ->
             routesLayoutBinding.pbFetchingTimetable.visibility = if(isLoading) View.VISIBLE else View.GONE
+        }
+
+        viewModel.routes.observe(viewLifecycleOwner) { routes ->
+            Log.i(LOGTAG, "routes observer: size = ${routes.size}")
+            routesAdapter.setRoutes(routes)
         }
 
         viewModel.currentScreen.observe(viewLifecycleOwner) { screen ->
@@ -74,5 +89,42 @@ class MapFragment: Fragment() {
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
+    }
+
+    override fun onRouteToggle(routeId: String, currentlyExpanded: Boolean) {
+
+        Log.i(LOGTAG, "onRouteToggle called. id: $routeId, expanded? $currentlyExpanded")
+        if(currentlyExpanded) {
+            routesAdapter.removeStopsForRoute(routeId)
+            Log.i(LOGTAG, "onRouteToggle, removed stops for $routeId, dump: ${routesAdapter.debugDump()}")
+            return
+        }
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            Log.i(LOGTAG, "onRouteToggle getting stops")
+            withContext(Dispatchers.IO) {Log.i(LOGTAG, "stops query: ${viewModel.getStopsOfRoute(routeId, reverse = false)}")}
+            val stops = withContext(Dispatchers.IO) {
+
+                viewModel.getStopsOfRoute(routeId, reverse = false)
+
+
+            }
+            Log.i(LOGTAG, "mapFragment: fetched stops.size=${stops.size} for routeId=$routeId; first=${stops.firstOrNull()?.let { it.id ?: it.name } ?: "none"}")
+            withContext(Dispatchers.Main) {
+                routesAdapter.insertStopsForRoute(routeId, stops)
+                val pos = routesAdapter.findRoutePosition(routeId)
+                if(pos >= 0) {
+                    (routesLayoutBinding.transportLinesRecyclerView.layoutManager)?.scrollToPosition(pos)
+                }
+            }
+
+        }
+    }
+
+    private fun setupRoutesRecyclerView() {
+        val routesRecycler = routesLayoutBinding.transportLinesRecyclerView
+        routesAdapter = RoutesAdapter(this)
+        routesRecycler.adapter = routesAdapter
+        routesRecycler.layoutManager = LinearLayoutManager(requireContext())
     }
 }

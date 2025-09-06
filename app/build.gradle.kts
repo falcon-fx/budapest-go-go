@@ -81,6 +81,7 @@ dependencies {
     implementation(libs.androidx.navigation.fragment.ktx)
     implementation(libs.androidx.navigation.ui.ktx)
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.6.1")
+    implementation("androidx.recyclerview:recyclerview:1.3.2")
 
     // Additional dependencies
     implementation("androidx.room:room-runtime:2.6.1")

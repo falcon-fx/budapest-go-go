@@ -3,26 +3,41 @@
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:padding="@dimen/route_item_padding">
+    android:layout_height="wrap_content"
+    android:padding="@dimen/common_item_padding">
     <TextView
         android:id="@+id/tvRouteShortName"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:hint="41"
-        android:textSize="18sp"
+        android:textSize="@dimen/route_text_shortname_size"
         android:textStyle="bold"
+        android:includeFontPadding="false"
+        android:textAlignment="center"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toTopOf="@id/tvRouteHeadsign"
+        android:paddingHorizontal="@dimen/route_shortname_padding_horizontal"
+        android:paddingVertical="@dimen/route_shortname_padding_vertical"/>
     <TextView
+        android:id="@+id/tvRouteHeadsign"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:hint="Bécsi út"
-        android:textSize="14sp"
+        android:textSize="@dimen/route_text_headsign_size"
+        app:layout_constraintTop_toTopOf="@id/tvRouteShortName"
         app:layout_constraintStart_toEndOf="@id/tvRouteShortName"
+        app:layout_constraintEnd_toStartOf="@id/btnExpandRouteStops"
+        android:layout_marginHorizontal="@dimen/common_item_padding"
+        />
+    <ImageButton
+        android:id="@+id/btnExpandRouteStops"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:contentDescription="Show stops"
+        android:src="@android:drawable/arrow_down_float"
         app:layout_constraintTop_toTopOf="@id/tvRouteShortName"
         app:layout_constraintBottom_toBottomOf="@id/tvRouteShortName"
-        />
+        app:layout_constraintEnd_toEndOf="parent" />
 
 
 

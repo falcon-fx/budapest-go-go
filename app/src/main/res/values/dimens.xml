@@ -1,4 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <dimen name="route_item_padding">12dp</dimen>
+    <dimen name="common_item_padding">14dp</dimen>
+    <dimen name="route_text_headsign_size">14sp</dimen>
+    <dimen name="route_text_shortname_size">20sp</dimen>
+    <dimen name="route_shortname_padding_horizontal">12dp</dimen>
+    <dimen name="route_shortname_padding_vertical">4dp</dimen>
+    <dimen name="stop_item_indicator_size">16dp</dimen>
+    <dimen name="stop_item_name_gonemargin">30dp</dimen>
 </resources>

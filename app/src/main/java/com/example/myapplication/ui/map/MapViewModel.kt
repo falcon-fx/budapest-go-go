@@ -51,6 +51,7 @@ class MapViewModel @Inject constructor(
         viewModelScope.launch {
             Log.i(logTag, "loadRoutes called")
             val allRoutes = timetable.getAllRoutes()
+            Log.i(logTag, "allRoutes: ${allRoutes.size} routes, ${allRoutes}")
             _routes.postValue(allRoutes)
         }
     }

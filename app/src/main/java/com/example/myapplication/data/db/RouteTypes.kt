@@ -1,11 +1,13 @@
 package com.example.myapplication.data.db
 
-enum class RouteTypes(val typeInt: Int) {
-    TRAM(0),
-    METRO(1),
-    BUS(3),
-    FERRY(4),
-    TROLLEYBUS(11),
-    SUBURBANRAIL(109),
-    UNKNOWN(999)
+import android.graphics.Color
+
+enum class RouteTypes(val typeInt: Int, val displayName: String) {
+    TRAM(0, "Villamos"),
+    METRO(1, "Metró"),
+    BUS(3, "Busz"),
+    FERRY(4, "Hajó"),
+    TROLLEYBUS(11, "Trolibusz"),
+    SUBURBANRAIL(109, "HÉV"),
+    UNKNOWN(999, "Ismeretlen")
 }
