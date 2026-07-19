@@ -37,11 +37,13 @@ class AuthViewModel @Inject constructor(
 
     fun hasCertificates(): Boolean = certRepo.hasCertificates()
 
-    fun importCertificatesFromZip(inputStream: InputStream) {
+    fun getCertificateCount(): Int = certRepo.getCertificateFiles().size
+
+    fun importCertificatesFromZip(zipBytes: ByteArray) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 // Repository handles all business logic: extraction, validation, storage
-                certRepo.importFromZipStream(inputStream)
+                certRepo.importFromZipBytes(zipBytes)
                 _certImportSuccess.postValue(Event(Unit))
                 _requireRestart.postValue(Event(Unit))
             } catch (e: CertificateImportException) {

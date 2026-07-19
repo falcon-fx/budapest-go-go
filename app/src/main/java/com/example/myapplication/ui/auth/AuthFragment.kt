@@ -103,10 +103,11 @@ class AuthFragment: Fragment() {
     }
 
     private fun updateCertStatus() {
-        binding.tViewCertStatus.text = if (authViewModel.hasCertificates()) {
-            getString(R.string.cert_status_ok)
+        if (authViewModel.hasCertificates()) {
+            val certCount = authViewModel.getCertificateCount()
+            binding.tViewCertStatus.text = getString(R.string.cert_status_ok, certCount)
         } else {
-            getString(R.string.cert_status_missing)
+            binding.tViewCertStatus.text = getString(R.string.cert_status_missing)
         }
     }
 
@@ -122,8 +123,17 @@ class AuthFragment: Fragment() {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQUEST_CODE_PICK_ZIP && resultCode == Activity.RESULT_OK) {
             data?.data?.let { uri ->
-                requireContext().contentResolver.openInputStream(uri)?.use { stream ->
-                    authViewModel.importCertificatesFromZip(stream)
+                try {
+                    requireContext().contentResolver.openInputStream(uri)?.use { stream ->
+                        val zipBytes = stream.readBytes()
+                        authViewModel.importCertificatesFromZip(zipBytes)
+                    }
+                } catch (e: Exception) {
+                    AlertDialog.Builder(requireContext())
+                        .setTitle("Error")
+                        .setMessage("Failed to read file: ${e.message}")
+                        .setPositiveButton("OK", null)
+                        .show()
                 }
             }
         }

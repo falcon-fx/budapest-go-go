@@ -49,73 +49,6 @@ import javax.net.ssl.X509TrustManager
 @InstallIn(SingletonComponent::class)
 object AppModule {
 
-    // Helper
-    private fun buildSslFactoryWithBundledCAs(context: Context, certResources: IntArray): Pair<SSLSocketFactory, X509TrustManager> {
-        val certFactory = CertificateFactory.getInstance("X.509")
-        val appKeyStore = KeyStore.getInstance(KeyStore.getDefaultType()).apply { load(null) }
-
-        certResources.forEachIndexed { idx, resourceId ->
-            val inStream: InputStream = context.resources.openRawResource(resourceId)
-            val cert = certFactory.generateCertificate(inStream) as X509Certificate
-            inStream.close()
-            appKeyStore.setCertificateEntry("app-ca-$idx", cert)
-        }
-
-        val tmfApp = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm()).apply { init(appKeyStore) }
-
-        val appTm = tmfApp.trustManagers
-            .filterIsInstance<X509TrustManager>()
-            .firstOrNull()
-
-        val tmfSystem = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm()).apply { init(null as KeyStore?) }
-
-        val systemTm = tmfSystem.trustManagers
-            .filterIsInstance<X509TrustManager>()
-            .firstOrNull()
-            ?: throw IllegalStateException("No system X509TrustManager available")
-
-        val compositeTm = object : X509TrustManager {
-
-            @Throws(CertificateException::class)
-            override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {
-                try {
-                    systemTm.checkClientTrusted(chain, authType)
-                } catch (ce: CertificateException) {
-                    if (appTm != null) {
-                        appTm.checkClientTrusted(chain, authType)
-                    } else {
-                        throw ce
-                    }
-                }
-            }
-
-            @Throws(CertificateException::class)
-            override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {
-                try {
-                    systemTm.checkServerTrusted(chain, authType)
-                } catch (se: CertificateException) {
-                    if (appTm != null) {
-                        appTm.checkServerTrusted(chain, authType) // may throw
-                    } else {
-                        throw se
-                    }
-                }
-            }
-
-            override fun getAcceptedIssuers(): Array<X509Certificate> {
-                val sys = systemTm.acceptedIssuers
-                val app = appTm?.acceptedIssuers ?: emptyArray()
-                return sys + app
-            }
-
-        }
-
-        val sslContext = SSLContext.getInstance("TLS")
-        sslContext.init(null, arrayOf<TrustManager>(compositeTm), null)
-
-        return Pair(sslContext.socketFactory, compositeTm)
-    }
-
     // Helper - file-based certificate loading
     private fun buildSslFactoryFromFiles(context: Context, certFiles: List<File>): Pair<SSLSocketFactory, X509TrustManager> {
         val certFactory = CertificateFactory.getInstance("X.509")
@@ -231,13 +164,12 @@ object AppModule {
     ): OkHttpClient {
         var builder = OkHttpClient.Builder()
 
-        // Check if certificates exist in files, otherwise fallback to raw resources
-        val (sslSocketFactory, trustManager) = if (certRepo.hasCertificates()) {
-            buildSslFactoryFromFiles(context, certRepo.getCertificateFiles())
-        } else {
-            val certResources = intArrayOf(R.raw.eszigno_root, R.raw.eszigno_intermediate, R.raw.go_bkk_hu)
-            buildSslFactoryWithBundledCAs(context, certResources)
+        // Load certificates from files - throws if not available
+        if (!certRepo.hasCertificates()) {
+            throw IllegalStateException("No certificates available. User must import certificates.")
         }
+
+        val (sslSocketFactory, trustManager) = buildSslFactoryFromFiles(context, certRepo.getCertificateFiles())
 
         val finalSocketFactory: SSLSocketFactory = if (Build.VERSION.SDK_INT in 16..21) {
             Tls12SocketFactory(sslSocketFactory)

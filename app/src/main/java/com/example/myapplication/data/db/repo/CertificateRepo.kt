@@ -7,7 +7,7 @@ interface CertificateRepo {
     fun hasCertificates(): Boolean
     fun getCertificateFiles(): List<File>
     @Throws(CertificateImportException::class)
-    fun importFromZipStream(inputStream: InputStream)
+    fun importFromZipBytes(zipBytes: ByteArray)
     fun clearCertificates()
 }
 
