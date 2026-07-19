@@ -12,7 +12,9 @@
         tools:layout="@layout/fragment_auth">
         <action
             android:id="@+id/action_nav_auth_to_nav_map"
-            app:destination="@id/nav_map" />
+            app:destination="@id/nav_map"
+            app:popUpTo="@id/nav_auth"
+            app:popUpToInclusive="true" />
     </fragment>
 
     <fragment

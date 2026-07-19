@@ -30,36 +30,35 @@ abstract class BkkDatabase: RoomDatabase() {
     abstract val vehicleDao: VehicleDao
     abstract val timetableDao: TimetableDao
 
-    private fun deleteTableInChunks(db: SupportSQLiteDatabase, table: String, chunkSize: Int = 10_000) {
-        // Do not call this while you have an open transaction that spans multiple calls.
-        while (true) {
-            // Delete up to chunkSize rows using rowid selection
-            val statement = db.compileStatement("DELETE FROM $table WHERE rowid IN (SELECT rowid FROM $table LIMIT ?)")
-            statement.bindLong(1, chunkSize.toLong())
-            val removed = statement.use {
-                it.executeUpdateDelete()
-            }
-            if (removed == 0) break
-            db.query("PRAGMA wal_checkpoint(TRUNCATE)", emptyArray()).close()
-        }
-    }
-
     suspend fun fastClearAll() {
         withContext(Dispatchers.IO) {
             val db = openHelper.writableDatabase
-            deleteTableInChunks(db, "trips")
-            Log.i(LOGTAG, "deleted trips")
-            deleteTableInChunks(db, "routes")
-            Log.i(LOGTAG, "deleted routes")
-            deleteTableInChunks(db, "stops")
-            Log.i(LOGTAG, "deleted stops")
-            deleteTableInChunks(db, "timetable")
+
+            // Disable FK temporarily (API 18+ compatible)
+            db.execSQL("PRAGMA foreign_keys = OFF")
+
+            // Delete all - order matters for FK safety if re-enabled
+            db.execSQL("DELETE FROM timetable")
             Log.i(LOGTAG, "deleted timetable")
+
+            db.execSQL("DELETE FROM trips")
+            Log.i(LOGTAG, "deleted trips")
+
+            db.execSQL("DELETE FROM routes")
+            Log.i(LOGTAG, "deleted routes")
+
+            db.execSQL("DELETE FROM stops")
+            Log.i(LOGTAG, "deleted stops")
+
+            // Single checkpoint at end
             db.query("PRAGMA journal_mode", emptyArray()).use { c ->
                 if (c.moveToFirst() && c.getString(0).equals("wal", ignoreCase = true)) {
                     db.query("PRAGMA wal_checkpoint(TRUNCATE)", emptyArray()).close()
                 }
             }
+
+            // Re-enable FK
+            db.execSQL("PRAGMA foreign_keys = ON")
         }
     }
 }

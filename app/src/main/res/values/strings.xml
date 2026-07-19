@@ -14,4 +14,14 @@
     <string name="cert_status_missing">Required: go_bkk_hu.pem certificate</string>
     <string name="cert_status_ok">Certificate loaded (%1$d file(s))</string>
     <string name="cert_error_title">Certificate Error</string>
+
+    <!-- Progress messages for database loading -->
+    <string name="progress_downloading">Downloading timetable… %1$d%%</string>
+    <string name="progress_clearing">Clearing old data… %1$d%%</string>
+    <string name="progress_extracting">Extracting files… %1$d%%</string>
+    <string name="progress_parsing_stops">Loading stops… %1$d%%</string>
+    <string name="progress_parsing_routes">Loading routes… %1$d%%</string>
+    <string name="progress_parsing_trips">Loading trips… %1$d%%</string>
+    <string name="progress_parsing_timetable">Loading schedules… %1$d%%</string>
+    <string name="progress_complete">Complete!</string>
 </resources>

@@ -16,6 +16,7 @@ import com.example.myapplication.R
 import com.example.myapplication.databinding.FragmentMapBinding
 import com.example.myapplication.databinding.LayoutMapBinding
 import com.example.myapplication.databinding.LayoutRoutesBinding
+import com.example.myapplication.data.db.repo.LoadingProgress.Companion.getMessageResId
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -30,6 +31,7 @@ class MapFragment: Fragment(), RoutesAdapter.ToggleListener {
     private lateinit var mapLayoutBinding: LayoutMapBinding
     private lateinit var routesLayoutBinding: LayoutRoutesBinding
     private lateinit var routesAdapter: RoutesAdapter
+    private var progressDialog: AlertDialog? = null
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -53,7 +55,15 @@ class MapFragment: Fragment(), RoutesAdapter.ToggleListener {
         setupRoutesRecyclerView()
 
         viewModel.loading.observe(viewLifecycleOwner) { isLoading ->
-            routesLayoutBinding.pbFetchingTimetable.visibility = if(isLoading) View.VISIBLE else View.GONE
+            if (isLoading) {
+                showProgressDialog()
+            } else {
+                dismissProgressDialog()
+            }
+        }
+
+        viewModel.loadingProgress.observe(viewLifecycleOwner) { progress ->
+            updateProgressDialog(progress)
         }
 
         viewModel.routes.observe(viewLifecycleOwner) { routes ->
@@ -104,7 +114,31 @@ class MapFragment: Fragment(), RoutesAdapter.ToggleListener {
 
     override fun onDestroyView() {
         super.onDestroyView()
+        dismissProgressDialog()
         _binding = null
+    }
+
+    private fun showProgressDialog() {
+        if (progressDialog == null) {
+            val dialogView = layoutInflater.inflate(R.layout.dialog_loading_progress, null)
+            progressDialog = AlertDialog.Builder(requireContext())
+                .setView(dialogView)
+                .setCancelable(false)
+                .create()
+        }
+        progressDialog?.show()
+    }
+
+    private fun dismissProgressDialog() {
+        progressDialog?.dismiss()
+        progressDialog = null
+    }
+
+    private fun updateProgressDialog(progress: com.example.myapplication.data.db.repo.LoadingProgress) {
+        progressDialog?.findViewById<android.widget.TextView>(R.id.tvProgress)?.text = getString(
+            progress.phase.getMessageResId(),
+            progress.percentage
+        )
     }
 
     override fun onRouteToggle(routeId: String, currentlyExpanded: Boolean) {

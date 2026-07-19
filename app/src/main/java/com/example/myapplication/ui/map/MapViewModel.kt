@@ -42,6 +42,9 @@ class MapViewModel @Inject constructor(
     private val _certError = MutableLiveData<Event<String>>()
     val certError: LiveData<Event<String>> = _certError
 
+    private val _loadingProgress = MutableLiveData<com.example.myapplication.data.db.repo.LoadingProgress>()
+    val loadingProgress: LiveData<com.example.myapplication.data.db.repo.LoadingProgress> = _loadingProgress
+
     fun switchScreens(screen: Screen) { _currentScreen.value = screen }
 
     private fun requireCertsOrError(): Boolean {
@@ -56,7 +59,11 @@ class MapViewModel @Inject constructor(
         if (!requireCertsOrError()) return
         viewModelScope.launch {
             _loading.value = true
-            timetable.fetchAndStoreTimetable(cacheDir, batchSize)
+
+            timetable.fetchAndStoreTimetable(cacheDir, batchSize) { progress ->
+                _loadingProgress.postValue(progress)
+            }
+
             _loading.value = false
             loadRoutes()
         }
