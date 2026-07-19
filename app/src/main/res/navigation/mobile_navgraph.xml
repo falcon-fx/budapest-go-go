@@ -20,6 +20,9 @@
         android:name="com.example.myapplication.ui.map.MapFragment"
         android:label="MapFragment"
         tools:layout="@layout/fragment_map">
+        <action
+            android:id="@+id/action_nav_map_to_nav_auth"
+            app:destination="@id/nav_auth" />
     </fragment>
 
 </navigation>

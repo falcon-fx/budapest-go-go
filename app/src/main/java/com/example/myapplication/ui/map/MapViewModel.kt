@@ -11,8 +11,10 @@ import androidx.lifecycle.viewModelScope
 import com.example.myapplication.data.db.RouteEntity
 import com.example.myapplication.data.db.StopEntity
 import com.example.myapplication.data.db.repo.AuthRepo
+import com.example.myapplication.data.db.repo.CertificateRepo
 import com.example.myapplication.data.db.repo.TimetableRepo
 import com.example.myapplication.data.db.repo.VehicleRepo
+import com.example.myapplication.ui.Event
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
 import java.io.File
@@ -23,7 +25,8 @@ import kotlin.math.log
 class MapViewModel @Inject constructor(
     private val timetable: TimetableRepo,
     private val auth: AuthRepo,
-    private val vehicles: VehicleRepo
+    private val vehicles: VehicleRepo,
+    private val certRepo: CertificateRepo
 ): ViewModel() {
     val logTag = "MAPSCREEN"
     private val batchSize = 50000
@@ -36,9 +39,21 @@ class MapViewModel @Inject constructor(
     private val _routes = MutableLiveData<List<RouteEntity>>(emptyList())
     val routes : LiveData<List<RouteEntity>> = _routes
 
+    private val _certError = MutableLiveData<Event<String>>()
+    val certError: LiveData<Event<String>> = _certError
+
     fun switchScreens(screen: Screen) { _currentScreen.value = screen }
 
+    private fun requireCertsOrError(): Boolean {
+        if (!certRepo.hasCertificates()) {
+            _certError.value = Event("Certificates not found. Please import certificates from the setup screen.")
+            return false
+        }
+        return true
+    }
+
     fun fetchTimetable(cacheDir: File) {
+        if (!requireCertsOrError()) return
         viewModelScope.launch {
             _loading.value = true
             timetable.fetchAndStoreTimetable(cacheDir, batchSize)

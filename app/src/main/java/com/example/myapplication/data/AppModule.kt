@@ -10,7 +10,9 @@ import com.example.myapplication.data.api.BkkApiService
 import com.example.myapplication.data.db.BkkDatabase
 import com.example.myapplication.data.db.dao.TimetableDao
 import com.example.myapplication.data.db.repo.AuthRepo
+import com.example.myapplication.data.db.repo.CertificateRepo
 import com.example.myapplication.data.db.repo.ProdAuthRepo
+import com.example.myapplication.data.db.repo.ProdCertificateRepo
 import com.example.myapplication.data.db.repo.ProdTimetableRepo
 import com.example.myapplication.data.db.repo.ProdVehicleRepo
 import com.example.myapplication.data.db.repo.TimetableRepo
@@ -27,6 +29,8 @@ import okhttp3.OkHttpClient
 import okhttp3.TlsVersion
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.io.File
+import java.io.FileInputStream
 import java.io.InputStream
 import java.security.KeyStore
 import java.security.cert.CertificateException
@@ -112,6 +116,73 @@ object AppModule {
         return Pair(sslContext.socketFactory, compositeTm)
     }
 
+    // Helper - file-based certificate loading
+    private fun buildSslFactoryFromFiles(context: Context, certFiles: List<File>): Pair<SSLSocketFactory, X509TrustManager> {
+        val certFactory = CertificateFactory.getInstance("X.509")
+        val appKeyStore = KeyStore.getInstance(KeyStore.getDefaultType()).apply { load(null) }
+
+        certFiles.forEachIndexed { idx, file ->
+            FileInputStream(file).use { fis ->
+                val cert = certFactory.generateCertificate(fis) as X509Certificate
+                appKeyStore.setCertificateEntry("app-ca-$idx", cert)
+            }
+        }
+
+        val tmfApp = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm()).apply { init(appKeyStore) }
+
+        val appTm = tmfApp.trustManagers
+            .filterIsInstance<X509TrustManager>()
+            .firstOrNull()
+
+        val tmfSystem = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm()).apply { init(null as KeyStore?) }
+
+        val systemTm = tmfSystem.trustManagers
+            .filterIsInstance<X509TrustManager>()
+            .firstOrNull()
+            ?: throw IllegalStateException("No system X509TrustManager available")
+
+        val compositeTm = object : X509TrustManager {
+
+            @Throws(CertificateException::class)
+            override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {
+                try {
+                    systemTm.checkClientTrusted(chain, authType)
+                } catch (ce: CertificateException) {
+                    if (appTm != null) {
+                        appTm.checkClientTrusted(chain, authType)
+                    } else {
+                        throw ce
+                    }
+                }
+            }
+
+            @Throws(CertificateException::class)
+            override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {
+                try {
+                    systemTm.checkServerTrusted(chain, authType)
+                } catch (se: CertificateException) {
+                    if (appTm != null) {
+                        appTm.checkServerTrusted(chain, authType)
+                    } else {
+                        throw se
+                    }
+                }
+            }
+
+            override fun getAcceptedIssuers(): Array<X509Certificate> {
+                val sys = systemTm.acceptedIssuers
+                val app = appTm?.acceptedIssuers ?: emptyArray()
+                return sys + app
+            }
+
+        }
+
+        val sslContext = SSLContext.getInstance("TLS")
+        sslContext.init(null, arrayOf<TrustManager>(compositeTm), null)
+
+        return Pair(sslContext.socketFactory, compositeTm)
+    }
+
     // Bkk Database
     @Provides
     @Singleton
@@ -140,6 +211,11 @@ object AppModule {
     fun provideAuthRepo(@ApplicationContext context: Context): AuthRepo {
         return ProdAuthRepo(context)
     }
+    @Provides
+    @Singleton
+    fun provideCertificateRepo(@ApplicationContext context: Context): CertificateRepo {
+        return ProdCertificateRepo(context)
+    }
     // BKK Futár API
     @Provides
     @Singleton
@@ -149,12 +225,19 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideCompatibleOkHttpClient(@ApplicationContext context: Context): OkHttpClient {
+    fun provideCompatibleOkHttpClient(
+        @ApplicationContext context: Context,
+        certRepo: CertificateRepo
+    ): OkHttpClient {
         var builder = OkHttpClient.Builder()
 
-        val certResources = intArrayOf(R.raw.eszigno_root, R.raw.eszigno_intermediate, R.raw.go_bkk_hu)
-
-        val (sslSocketFactory, trustManager) = buildSslFactoryWithBundledCAs(context, certResources)
+        // Check if certificates exist in files, otherwise fallback to raw resources
+        val (sslSocketFactory, trustManager) = if (certRepo.hasCertificates()) {
+            buildSslFactoryFromFiles(context, certRepo.getCertificateFiles())
+        } else {
+            val certResources = intArrayOf(R.raw.eszigno_root, R.raw.eszigno_intermediate, R.raw.go_bkk_hu)
+            buildSslFactoryWithBundledCAs(context, certResources)
+        }
 
         val finalSocketFactory: SSLSocketFactory = if (Build.VERSION.SDK_INT in 16..21) {
             Tls12SocketFactory(sslSocketFactory)
