@@ -1,13 +1,12 @@
 package com.example.myapplication.data.db.repo
 
 import java.io.File
-import java.io.InputStream
 
 interface CertificateRepo {
     fun hasCertificates(): Boolean
     fun getCertificateFiles(): List<File>
     @Throws(CertificateImportException::class)
-    fun importFromZipBytes(zipBytes: ByteArray)
+    fun importCertificates(fileBytes: ByteArray)
     fun clearCertificates()
 }
 

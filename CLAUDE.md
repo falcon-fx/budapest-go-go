@@ -68,7 +68,7 @@ This is a Budapest public transport (BKK Futár) Android application targeting l
 
 ## Build Commands (Developer Reference)
 
-**IMPORTANT FOR CLAUDE:** Do not run gradle build/install commands. Only run tests if they exist. All app building and manual testing is done by the developer.
+**IMPORTANT FOR CLAUDE:** NEVER BUILD THE APP. Do NOT run gradle build, assemble, or install commands. Only run unit tests (`./gradlew test`) if needed. All app building and manual testing is done solely by the developer.
 
 ### Common Development Commands (Manual - Developer Use Only)
 

@@ -7,7 +7,6 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
-import java.io.InputStream
 import java.security.cert.CertificateFactory
 import java.util.zip.ZipInputStream
 import javax.inject.Inject
@@ -30,6 +29,69 @@ class ProdCertificateRepo @Inject constructor(
         )
 
         private val ALL_POSSIBLE_CERTS = listOf(REQUIRED_CERT) + OPTIONAL_CERTS
+
+        fun isZip(bytes: ByteArray): Boolean {
+            return bytes.size >= 4 &&
+                   bytes[0] == 0x50.toByte() &&
+                   bytes[1] == 0x4B.toByte() &&
+                   bytes[2] == 0x03.toByte() &&
+                   bytes[3] == 0x04.toByte()
+        }
+
+        @Throws(CertificateImportException::class)
+        fun parseZip(zipBytes: ByteArray): Map<String, ByteArray> {
+            val pemFiles = mutableMapOf<String, ByteArray>()
+            try {
+                ZipInputStream(zipBytes.inputStream()).use { zis ->
+                    var entry = zis.nextEntry
+                    while (entry != null) {
+                        if (entry.name.endsWith(".pem")) {
+                            val fileName = File(entry.name).name
+                            val bytes = zis.readBytes()
+                            pemFiles[fileName] = bytes
+                        }
+                        zis.closeEntry()
+                        entry = zis.nextEntry
+                    }
+                }
+            } catch (e: Exception) {
+                throw CertificateImportException("Failed to read ZIP file: ${e.message}")
+            }
+            return pemFiles
+        }
+
+        @Throws(CertificateImportException::class)
+        fun parsePemChain(pemBytes: ByteArray): Map<String, ByteArray> {
+            val pemFiles = mutableMapOf<String, ByteArray>()
+            try {
+                val text = String(pemBytes, Charsets.UTF_8)
+                val regex = Regex("-----BEGIN CERTIFICATE-----[\\s\\S]*?-----END CERTIFICATE-----")
+                val matches = regex.findAll(text).map { it.value.trim() }.toList()
+
+                if (matches.isEmpty()) {
+                    throw CertificateImportException("The file is not a valid ZIP and does not contain any valid PEM certificates")
+                }
+
+                if (matches.size > 3) {
+                    throw CertificateImportException("The PEM file contains too many certificates (${matches.size}). A maximum of 3 is allowed.")
+                }
+
+                matches.forEachIndexed { index, pemString ->
+                    val fileName = when (index) {
+                        0 -> REQUIRED_CERT
+                        1 -> OPTIONAL_CERTS[0]
+                        2 -> OPTIONAL_CERTS[1]
+                        else -> throw CertificateImportException("Invalid index mapping")
+                    }
+                    pemFiles[fileName] = pemString.toByteArray(Charsets.UTF_8)
+                }
+            } catch (e: CertificateImportException) {
+                throw e
+            } catch (e: Exception) {
+                throw CertificateImportException("Failed to parse PEM file: ${e.message}")
+            }
+            return pemFiles
+        }
     }
 
     private fun getCertsDir(): File {
@@ -55,144 +117,77 @@ class ProdCertificateRepo @Inject constructor(
     }
 
     @Throws(CertificateImportException::class)
-    override fun importFromZipBytes(zipBytes: ByteArray) {
-        Log.i(TAG, "importFromZipBytes: Starting certificate import (${zipBytes.size} bytes)")
+    override fun importCertificates(fileBytes: ByteArray) {
+        Log.i(TAG, "importCertificates: Starting import (${fileBytes.size} bytes)")
 
-        // 1. Extract all .pem files from zip
-        val pemFiles = mutableMapOf<String, ByteArray>()
-        try {
-            Log.i(TAG, "importFromZipBytes: Opening ZipInputStream")
-            ZipInputStream(zipBytes.inputStream()).use { zis ->
-                var entry = zis.nextEntry
-                var entryCount = 0
-                while (entry != null) {
-                    entryCount++
-                    Log.i(TAG, "importFromZipStream: Found entry #$entryCount: ${entry.name} (size=${entry.size})")
-
-                    if (entry.name.endsWith(".pem")) {
-                        val fileName = File(entry.name).name // Strip path
-                        Log.i(TAG, "importFromZipStream: Extracting .pem file: $fileName")
-                        val bytes = zis.readBytes()
-                        Log.i(TAG, "importFromZipStream: Read ${bytes.size} bytes from $fileName")
-                        pemFiles[fileName] = bytes
-                    } else {
-                        Log.i(TAG, "importFromZipStream: Skipping non-.pem file: ${entry.name}")
-                    }
-
-                    zis.closeEntry()
-                    entry = zis.nextEntry
-                }
-                Log.i(TAG, "importFromZipBytes: Finished reading ZIP. Total entries: $entryCount, PEM files: ${pemFiles.size}")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "importFromZipBytes: Failed to read ZIP file", e)
-            throw CertificateImportException("Failed to read ZIP file: ${e.message}")
+        val pemFiles = if (isZip(fileBytes)) {
+            Log.i(TAG, "importCertificates: ZIP file detected")
+            parseZip(fileBytes)
+        } else {
+            Log.i(TAG, "importCertificates: Assuming PEM chain file format")
+            parsePemChain(fileBytes)
         }
 
-        Log.i(TAG, "importFromZipBytes: Extracted ${pemFiles.size} PEM files: ${pemFiles.keys.joinToString()}")
-
-        // 2. Validate: at least 1 .pem, maximum 3 .pem files
-        Log.i(TAG, "importFromZipBytes: Validating file count")
         if (pemFiles.isEmpty()) {
-            Log.e(TAG, "importFromZipBytes: No .pem files found in ZIP")
-            throw CertificateImportException("ZIP must contain at least one .pem file")
+            throw CertificateImportException("No certificate files found")
         }
         if (pemFiles.size > 3) {
-            Log.e(TAG, "importFromZipBytes: Too many .pem files: ${pemFiles.size}")
-            throw CertificateImportException("ZIP must contain at most 3 .pem files, found ${pemFiles.size}")
+            throw CertificateImportException("Too many certificates: found ${pemFiles.size}, maximum of 3 allowed")
         }
-        Log.i(TAG, "importFromZipBytes: File count valid (${pemFiles.size})")
 
-        // 3. Validate: REQUIRED_CERT (go_bkk_hu.pem) must be present
-        Log.i(TAG, "importFromZipBytes: Checking for required certificate: $REQUIRED_CERT")
         if (!pemFiles.containsKey(REQUIRED_CERT)) {
-            Log.e(TAG, "importFromZipBytes: Required certificate missing. Found: ${pemFiles.keys.joinToString()}")
-            throw CertificateImportException("ZIP must contain $REQUIRED_CERT (required)")
+            throw CertificateImportException("Required certificate $REQUIRED_CERT must be present")
         }
-        Log.i(TAG, "importFromZipBytes: Required certificate found")
 
-        // 4. Validate: only allow known certificate names
-        Log.i(TAG, "importFromZipBytes: Validating certificate names")
         val unknownCerts = pemFiles.keys - ALL_POSSIBLE_CERTS.toSet()
         if (unknownCerts.isNotEmpty()) {
-            Log.e(TAG, "importFromZipBytes: Unknown certificates: ${unknownCerts.joinToString()}")
             throw CertificateImportException("Unknown certificate files: ${unknownCerts.joinToString()}")
         }
-        Log.i(TAG, "importFromZipBytes: All certificate names are valid")
 
-        // 5. Validate each is a valid X.509 certificate
-        Log.i(TAG, "importFromZipBytes: Validating X.509 certificate format")
         val certFactory = CertificateFactory.getInstance("X.509")
         pemFiles.forEach { (name, pemBytes) ->
             try {
-                Log.i(TAG, "importFromZipBytes: Parsing certificate: $name (${pemBytes.size} bytes)")
-
-                // Log first 100 bytes to see what format it is
-                val preview = pemBytes.take(100).map { it.toInt().toChar() }.joinToString("")
-                Log.i(TAG, "importFromZipBytes: First 100 chars: $preview")
-
-                // Check if it looks like PEM format
                 val content = String(pemBytes, Charsets.UTF_8)
                 if (!content.contains("-----BEGIN CERTIFICATE-----")) {
-                    Log.e(TAG, "importFromZipBytes: File $name does not appear to be in PEM format (missing -----BEGIN CERTIFICATE-----)")
-                    throw CertificateImportException("Certificate file $name must be in PEM format (text format starting with -----BEGIN CERTIFICATE-----). The file appears to be in DER format or is not a valid certificate.")
+                    throw CertificateImportException("Certificate file $name must be in PEM format (starting with -----BEGIN CERTIFICATE-----)")
                 }
-
                 certFactory.generateCertificate(pemBytes.inputStream())
-                Log.i(TAG, "importFromZipBytes: Certificate $name is valid")
+                Log.i(TAG, "importCertificates: Certificate $name is valid")
             } catch (e: CertificateImportException) {
                 throw e
             } catch (e: Exception) {
-                Log.e(TAG, "importFromZipBytes: Invalid certificate $name", e)
                 throw CertificateImportException("Invalid certificate file $name: ${e.message}")
             }
         }
-        Log.i(TAG, "importFromZipBytes: All certificates are valid X.509 format")
 
-        // 6. Atomically write files (use .tmp → rename pattern)
-        Log.i(TAG, "importFromZipBytes: Writing certificates to disk")
         val certsDir = getCertsDir()
         certsDir.mkdirs()
-        Log.i(TAG, "importFromZipBytes: Certificate directory: ${certsDir.absolutePath}")
 
         try {
             pemFiles.forEach { (name, pemBytes) ->
                 val tmpFile = File(certsDir, "$name.tmp")
                 val finalFile = File(certsDir, name)
 
-                Log.i(TAG, "importFromZipBytes: Writing $name to ${tmpFile.absolutePath}")
                 FileOutputStream(tmpFile).use { fos ->
                     fos.write(pemBytes)
                     fos.fd.sync()
                 }
-                Log.i(TAG, "importFromZipBytes: Wrote ${pemBytes.size} bytes to $name.tmp")
 
-                Log.i(TAG, "importFromZipBytes: Renaming ${tmpFile.name} to ${finalFile.name}")
                 if (!tmpFile.renameTo(finalFile)) {
-                    Log.e(TAG, "importFromZipBytes: Failed to rename $tmpFile to $finalFile")
                     throw IOException("Failed to rename $tmpFile to $finalFile")
                 }
-                Log.i(TAG, "importFromZipBytes: Successfully saved $name")
+                Log.i(TAG, "importCertificates: Successfully saved $name")
             }
 
-            // 7. Set SharedPreferences flag only after all files written successfully
-            Log.i(TAG, "importFromZipBytes: Setting has_certs flag to true")
             preferences.edit {
                 putBoolean(KEY_HAS_CERTS, true)
             }
 
-            Log.i(TAG, "importFromZipBytes: Certificate import completed successfully")
+            Log.i(TAG, "importCertificates: Certificate import completed successfully")
 
         } catch (e: Exception) {
-            // Clean up on failure
-            Log.e(TAG, "importFromZipBytes: Import failed, cleaning up", e)
-            certsDir.listFiles()?.forEach {
-                Log.i(TAG, "importFromZipBytes: Deleting ${it.name}")
-                it.delete()
-            }
-            preferences.edit {
-                remove(KEY_HAS_CERTS)
-            }
+            certsDir.listFiles()?.forEach { it.delete() }
+            preferences.edit { remove(KEY_HAS_CERTS) }
             throw CertificateImportException("Failed to store certificates: ${e.message}")
         }
     }

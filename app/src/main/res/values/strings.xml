@@ -10,7 +10,7 @@
     <string name="button_fetch_timetable">Fetch</string>
     <string name="button_routes_dropdown_menu">Options</string>
     <string name="textedit_findroute_hint">Find your transport line</string>
-    <string name="button_import_certs">Import Certificate (.zip)</string>
+    <string name="button_import_certs">Import Certificate (.zip or .pem)</string>
     <string name="cert_status_missing">Required: go_bkk_hu.pem certificate</string>
     <string name="cert_status_ok">Certificate loaded (%1$d file(s))</string>
     <string name="cert_error_title">Certificate Error</string>

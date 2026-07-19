@@ -13,7 +13,7 @@ import com.example.myapplication.data.db.repo.AuthRepo
 import com.example.myapplication.data.db.repo.CertificateImportException
 import com.example.myapplication.data.db.repo.CertificateRepo
 import com.example.myapplication.ui.Event
-import java.io.InputStream
+
 
 @HiltViewModel
 class AuthViewModel @Inject constructor(
@@ -39,11 +39,11 @@ class AuthViewModel @Inject constructor(
 
     fun getCertificateCount(): Int = certRepo.getCertificateFiles().size
 
-    fun importCertificatesFromZip(zipBytes: ByteArray) {
+    fun importCertificates(fileBytes: ByteArray) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 // Repository handles all business logic: extraction, validation, storage
-                certRepo.importFromZipBytes(zipBytes)
+                certRepo.importCertificates(fileBytes)
                 _certImportSuccess.postValue(Event(Unit))
                 _requireRestart.postValue(Event(Unit))
             } catch (e: CertificateImportException) {

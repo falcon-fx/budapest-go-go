@@ -25,7 +25,7 @@ class AuthFragment: Fragment() {
     private val authViewModel: AuthViewModel by viewModels()
 
     companion object {
-        private const val REQUEST_CODE_PICK_ZIP = 1001
+        private const val REQUEST_CODE_PICK_FILE = 1001
     }
 
     override fun onCreateView(
@@ -113,20 +113,28 @@ class AuthFragment: Fragment() {
 
     private fun openFilePicker() {
         val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
-            type = "application/zip"
+            type = "*/*"
+            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf(
+                "application/zip",
+                "application/x-zip-compressed",
+                "application/x-x509-ca-cert",
+                "application/x-pem-file",
+                "text/plain",
+                "application/octet-stream"
+            ))
             addCategory(Intent.CATEGORY_OPENABLE)
         }
-        startActivityForResult(Intent.createChooser(intent, "Select certificate ZIP"), REQUEST_CODE_PICK_ZIP)
+        startActivityForResult(Intent.createChooser(intent, "Select certificate ZIP or PEM"), REQUEST_CODE_PICK_FILE)
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQUEST_CODE_PICK_ZIP && resultCode == Activity.RESULT_OK) {
+        if (requestCode == REQUEST_CODE_PICK_FILE && resultCode == Activity.RESULT_OK) {
             data?.data?.let { uri ->
                 try {
                     requireContext().contentResolver.openInputStream(uri)?.use { stream ->
-                        val zipBytes = stream.readBytes()
-                        authViewModel.importCertificatesFromZip(zipBytes)
+                        val fileBytes = stream.readBytes()
+                        authViewModel.importCertificates(fileBytes)
                     }
                 } catch (e: Exception) {
                     AlertDialog.Builder(requireContext())
