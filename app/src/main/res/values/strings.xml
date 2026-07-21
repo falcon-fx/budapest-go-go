@@ -24,4 +24,8 @@
     <string name="progress_parsing_trips">Loading trips… %1$d%%</string>
     <string name="progress_parsing_timetable">Loading schedules… %1$d%%</string>
     <string name="progress_complete">Complete!</string>
+
+    <!-- Map screen -->
+    <string name="location_permission_denied_message">Permission for location denied. Please enable it in Settings</string>
+    <string name="button_open_settings">Open Settings</string>
 </resources>

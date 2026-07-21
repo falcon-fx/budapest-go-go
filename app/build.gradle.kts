@@ -97,6 +97,7 @@ dependencies {
     ksp("com.google.dagger:hilt-android-compiler:2.56.2")
     implementation("com.google.transit:gtfs-realtime-bindings:0.0.4")
     implementation("org.conscrypt:conscrypt-android:2.5.2")
+    implementation("org.osmdroid:osmdroid-android:6.1.18")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
