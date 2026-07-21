@@ -422,9 +422,10 @@ class ProdTimetableRepo(
 
     override suspend fun getStopsOfRoute(
         routeId: String,
+        directionId: Boolean,
         reverse: Boolean
     ): List<StopEntity> {
-        return if (reverse) bkkDatabase.timetableDao.getStopsOfRouteDesc(routeId) else bkkDatabase.timetableDao.getStopsOfRouteAsc(routeId)
+        return if (reverse) bkkDatabase.timetableDao.getStopsOfRouteDesc(routeId, directionId) else bkkDatabase.timetableDao.getStopsOfRouteAsc(routeId, directionId)
     }
 
     override suspend fun getAllRoutes(): List<RouteEntity> {
@@ -449,5 +450,9 @@ class ProdTimetableRepo(
 
     override suspend fun getTypeOfRoute(routeId: String): RouteTypes {
         return bkkDatabase.timetableDao.getTypeOfRoute(routeId)
+    }
+
+    override suspend fun getFinalStopNameOfRoute(routeId: String, directionId: Boolean): String? {
+        return bkkDatabase.timetableDao.getFinalStopNameOfRoute(routeId, directionId)
     }
 }

@@ -13,11 +13,12 @@ interface TimetableRepo {
         batchSize: Int,
         progressCallback: (suspend (LoadingProgress) -> Unit)? = null
     )
-    suspend fun getStopsOfRoute(routeId: String, reverse: Boolean): List<StopEntity>
+    suspend fun getStopsOfRoute(routeId: String, directionId: Boolean, reverse: Boolean): List<StopEntity>
     suspend fun getAllRoutes(): List<RouteEntity>
     suspend fun getStopById(stopId: String): StopEntity
     suspend fun getRouteById(routeId: String): RouteEntity
     suspend fun getTripByRouteId(routeId: String): TripEntity
     suspend fun getTimesForRoute(routeId: String, reverse: Boolean): List<TimetableEntity>
     suspend fun getTypeOfRoute(routeId: String): RouteTypes
+    suspend fun getFinalStopNameOfRoute(routeId: String, directionId: Boolean): String?
 }

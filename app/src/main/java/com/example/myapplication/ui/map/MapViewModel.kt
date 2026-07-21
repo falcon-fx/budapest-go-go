@@ -78,7 +78,11 @@ class MapViewModel @Inject constructor(
         }
     }
 
-    suspend fun getStopsOfRoute(routeId: String, reverse: Boolean): List<StopEntity> {
-        return timetable.getStopsOfRoute(routeId, reverse)
+    suspend fun getStopsOfRoute(routeId: String, directionId: Boolean, reverse: Boolean): List<StopEntity> {
+        return timetable.getStopsOfRoute(routeId, directionId, reverse)
+    }
+
+    suspend fun getFinalStopNameOfRoute(routeId: String, directionId: Boolean): String? {
+        return timetable.getFinalStopNameOfRoute(routeId, directionId)
     }
 }

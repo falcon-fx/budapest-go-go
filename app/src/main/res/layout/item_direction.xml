@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/selectableItemBackground"
+    android:padding="@dimen/common_item_padding">
+    <TextView
+        android:id="@+id/tvDirection"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="A → B"
+        android:textStyle="bold"
+        android:textSize="@dimen/route_text_headsign_size"
+        android:paddingHorizontal="@dimen/common_item_padding"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/ivRefresh"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent" />
+    <ImageView
+        android:id="@+id/ivRefresh"
+        android:layout_width="@dimen/icon_size_m"
+        android:layout_height="@dimen/icon_size_m"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toEndOf="@id/tvDirection"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:src="@android:drawable/ic_menu_revert"
+        android:rotation="-90"/>
+</androidx.constraintlayout.widget.ConstraintLayout>

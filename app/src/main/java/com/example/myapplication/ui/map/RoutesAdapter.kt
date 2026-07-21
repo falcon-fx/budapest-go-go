@@ -15,6 +15,7 @@ import com.example.myapplication.data.util.DataParsers
 
 sealed class ListItem {
     data class RouteItem(val route: RouteEntity) : ListItem()
+    data class DirectionItem(val routeId: String, val directionId: Boolean, val terminusName: String?, val parentRouteId: String = routeId) : ListItem()
     data class StopItem(val stop: StopEntity, val parentRouteId: String) : ListItem()
 }
 
@@ -24,7 +25,8 @@ class RoutesAdapter(
     private val LOGTAG = "ROUTES_ADAPTER"
     companion object {
         private const val TYPE_ROUTE = 1
-        private const val TYPE_STOP = 2
+        private const val TYPE_DIRECTION = 2
+        private const val TYPE_STOP = 3
     }
 
     private val items = mutableListOf<ListItem>()
@@ -32,6 +34,7 @@ class RoutesAdapter(
 
     interface ToggleListener {
         fun onRouteToggle(routeId: String, currentlyExpanded: Boolean)
+        fun onDirectionToggle(routeId: String, directionId: Boolean)
     }
 
     fun debugDump(): String {
@@ -52,7 +55,7 @@ class RoutesAdapter(
         return items.indexOfFirst { it is ListItem.RouteItem && it.route.id == routeId }
     }
 
-    fun insertStopsForRoute(routeId: String, stops: List<StopEntity>) {
+    fun insertStopsForRoute(routeId: String, stops: List<StopEntity>, directionId: Boolean = false, terminusName: String? = null) {
         if(stops.isEmpty()) return
         if(expandedRoutesIds.contains(routeId)) return
         val routeIndex = findRoutePosition(routeId)
@@ -61,14 +64,15 @@ class RoutesAdapter(
             return
         }
 
-
+        val directionItem = ListItem.DirectionItem(routeId, directionId, terminusName)
         val stopItems = stops.map { ListItem.StopItem(it, routeId) }
         val insertAt = routeIndex + 1
-        items.addAll(insertAt, stopItems)
+        items.add(insertAt, directionItem)
+        items.addAll(insertAt + 1, stopItems)
         expandedRoutesIds.add(routeId)
-        notifyItemRangeInserted(insertAt, stopItems.size)
+        notifyItemRangeInserted(insertAt, stopItems.size + 1)
         notifyItemChanged(routeIndex)
-        Log.i(LOGTAG, "insertStops: inserted $routeId stops at $insertAt")
+        Log.i(LOGTAG, "insertStops: inserted $routeId stops at $insertAt with direction=$directionId, terminus=$terminusName")
     }
     fun removeStopsForRoute(routeId: String) {
         val routeIndex = findRoutePosition(routeId)
@@ -82,11 +86,14 @@ class RoutesAdapter(
         }
         val start = routeIndex + 1
         var end = start
-        /**val iterator = items.listIterator()
-        val toRemoveIndices = mutableListOf<Int>()*/
         while(end < items.size) {
             val it = items[end]
-            if(it is ListItem.StopItem && it.parentRouteId == routeId) {
+            val isOurItem = when(it) {
+                is ListItem.DirectionItem -> it.parentRouteId == routeId
+                is ListItem.StopItem -> it.parentRouteId == routeId
+                else -> false
+            }
+            if(isOurItem) {
                 end++
             } else {
                 break
@@ -100,9 +107,9 @@ class RoutesAdapter(
             expandedRoutesIds.remove(routeId)
             notifyItemRangeRemoved(start, removedCount)
             notifyItemChanged(routeIndex)
-            Log.i(LOGTAG, "removeStops: removed $removedCount stops for route $routeId starting at $start")
+            Log.i(LOGTAG, "removeStops: removed $removedCount items for route $routeId starting at $start")
         } else {
-            Log.i(LOGTAG, "removeStops: no stops to remove for $routeId")
+            Log.i(LOGTAG, "removeStops: no items to remove for $routeId")
         }
         /**
         while(iterator.hasNext()) {
@@ -141,6 +148,10 @@ class RoutesAdapter(
                 val view = inflater.inflate(R.layout.item_route, parent, false)
                 RouteViewHolder(view)
             }
+            TYPE_DIRECTION -> {
+                val view = inflater.inflate(R.layout.item_direction, parent, false)
+                DirectionViewHolder(view)
+            }
             TYPE_STOP -> {
                 val view = inflater.inflate(R.layout.item_stop, parent, false)
                 StopViewHolder(view)
@@ -153,6 +164,7 @@ class RoutesAdapter(
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         when(val item = items[position]) {
             is ListItem.RouteItem -> (holder as RouteViewHolder).bind(item.route)
+            is ListItem.DirectionItem -> (holder as DirectionViewHolder).bind(item)
             is ListItem.StopItem -> (holder as StopViewHolder).bind(item.stop)
         }
     }
@@ -160,6 +172,7 @@ class RoutesAdapter(
     override fun getItemViewType(position: Int): Int {
         return when(items[position]) {
             is ListItem.RouteItem -> TYPE_ROUTE
+            is ListItem.DirectionItem -> TYPE_DIRECTION
             is ListItem.StopItem -> TYPE_STOP
         }
     }
@@ -192,6 +205,27 @@ class RoutesAdapter(
 
             itemView.setOnClickListener(clickAction)
             btnExpand.setOnClickListener(clickAction)
+        }
+    }
+
+    inner class DirectionViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+        private val tvDirection: TextView = itemView.findViewById(R.id.tvDirection)
+        private var currentRouteId: String? = null
+        private var currentDirectionId: Boolean? = null
+
+        fun bind(item: ListItem.DirectionItem) {
+            currentRouteId = item.routeId
+            currentDirectionId = item.directionId
+            val directionLabel = item.terminusName?.let { "To $it" } ?: "Direction"
+            tvDirection.text = directionLabel
+
+            itemView.setOnClickListener {
+                val rId = currentRouteId
+                val dirId = currentDirectionId
+                if (rId != null && dirId != null) {
+                    toggleListener.onDirectionToggle(rId, dirId)
+                }
+            }
         }
     }
 

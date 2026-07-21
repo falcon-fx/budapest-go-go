@@ -7,4 +7,9 @@
     <dimen name="route_shortname_padding_vertical">4dp</dimen>
     <dimen name="stop_item_indicator_size">16dp</dimen>
     <dimen name="stop_item_name_gonemargin">30dp</dimen>
+    <dimen name="icon_size_xs">8dp</dimen>
+    <dimen name="icon_size_s">14dp</dimen>
+    <dimen name="icon_size_m">20dp</dimen>
+    <dimen name="icon_size_l">26dp</dimen>
+    <dimen name="icon_size_xl">32dp</dimen>
 </resources>

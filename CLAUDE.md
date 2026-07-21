@@ -131,9 +131,10 @@ com.example.myapplication/
     │   ├── AuthFragment.kt     # ZIP file picker, auto-skip if certs exist
     │   └── AuthViewModel.kt    # Orchestrates cert import, shows errors/restart prompts
     ├── map/                    # Main map view with route/stop selection
-    │   ├── MapFragment.kt      # Shows progress dialog during import
+    │   ├── MapFragment.kt      # Shows progress dialog during import, handles route/direction expansion
     │   ├── MapViewModel.kt     # Coordinates timetable fetch with progress tracking
-    │   └── RoutesAdapter.kt    # RecyclerView adapter for route list
+    │   ├── RoutesAdapter.kt    # RecyclerView adapter for route/direction/stop list
+    │   └── item_direction.xml  # Direction header layout (displays "To [TerminusName]")
     └── Event.kt                # Single-event wrapper for LiveData
 ```
 
@@ -213,6 +214,34 @@ com.example.myapplication/
 - Follow repository pattern - UI never directly calls Room DAOs or Retrofit services
 - LiveData for UI updates, coroutines (viewModelScope) for async work
 - Navigation Component for fragment transitions (see navigation graph in res/navigation/)
+
+### Route Directions and Stops Display
+
+**Direction Handling**:
+- GTFS trips have `direction_id` (Boolean): false=A, true=B. Routes can have stops in both directions.
+- UI displays routes as expandable items; clicking shows a **direction header** with the terminal stop name
+- Direction header displays "To [TerminusName]" (e.g., "To Kamaraerdei ifjúsági park")
+- Clicking the direction header swaps to the opposite direction, reloading stops for that direction
+- Always starts with direction A (direction_id=false)
+
+**Stop Queries**:
+- `TimetableDao.getStopsOfRoute*(routeId, directionId)` filters by both route AND direction
+- Queries include `GROUP BY stops.id` to deduplicate (each stop appears once per direction despite multiple timetable entries)
+- Terminal stop fetched via `TimetableDao.getFinalStopNameOfRoute(routeId, directionId)` ordered by `stop_seq DESC LIMIT 1`
+
+**RecyclerView Adapter** (RoutesAdapter.kt):
+- Three sealed `ListItem` types: RouteItem, DirectionItem (header), StopItem
+- `DirectionItem` stores routeId, directionId, terminusName for "To X" display
+- Expanding a route inserts direction header + stops for that direction
+- Collapsing removes both direction header and all stops
+- Direction header click triggers `onDirectionToggle()` in MapFragment
+
+**Data Flow**:
+1. User clicks route → Fragment calls `MapViewModel.getStopsOfRoute(routeId, directionId=false, reverse=false)`
+2. ViewModel calls repo → DAO returns stops (grouped by id, ordered by stop_seq)
+3. Fragment simultaneously fetches `MapViewModel.getFinalStopNameOfRoute(routeId, directionId)` for terminus
+4. Both passed to adapter → renders DirectionItem + StopItems
+5. User clicks direction header → Fragment toggles directionId, repeats flow with new direction
 
 ### Certificate and API Key Management
 

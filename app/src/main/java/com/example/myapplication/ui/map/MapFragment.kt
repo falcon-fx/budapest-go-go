@@ -24,6 +24,7 @@ import kotlinx.coroutines.withContext
 
 @AndroidEntryPoint
 class MapFragment: Fragment(), RoutesAdapter.ToggleListener {
+    private var currentDirection: Boolean = false
     private val LOGTAG = "MAP_FRAGMENT"
     private val viewModel: MapViewModel by viewModels()
     private var _binding: FragmentMapBinding? = null
@@ -150,25 +151,8 @@ class MapFragment: Fragment(), RoutesAdapter.ToggleListener {
             return
         }
 
-        viewLifecycleOwner.lifecycleScope.launch {
-            Log.i(LOGTAG, "onRouteToggle getting stops")
-            withContext(Dispatchers.IO) {Log.i(LOGTAG, "stops query: ${viewModel.getStopsOfRoute(routeId, reverse = false)}")}
-            val stops = withContext(Dispatchers.IO) {
-
-                viewModel.getStopsOfRoute(routeId, reverse = false)
-
-
-            }
-            Log.i(LOGTAG, "mapFragment: fetched stops.size=${stops.size} for routeId=$routeId; first=${stops.firstOrNull()?.let { it.id ?: it.name } ?: "none"}")
-            withContext(Dispatchers.Main) {
-                routesAdapter.insertStopsForRoute(routeId, stops)
-                val pos = routesAdapter.findRoutePosition(routeId)
-                if(pos >= 0) {
-                    (routesLayoutBinding.transportLinesRecyclerView.layoutManager)?.scrollToPosition(pos)
-                }
-            }
-
-        }
+        currentDirection = false
+        loadStopsForRoute(routeId)
     }
 
     private fun setupRoutesRecyclerView() {
@@ -176,5 +160,31 @@ class MapFragment: Fragment(), RoutesAdapter.ToggleListener {
         routesAdapter = RoutesAdapter(this)
         routesRecycler.adapter = routesAdapter
         routesRecycler.layoutManager = LinearLayoutManager(requireContext())
+    }
+
+    private fun loadStopsForRoute(routeId: String) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            Log.i(LOGTAG, "loadStopsForRoute called for $routeId, direction=$currentDirection")
+            val (stops, terminusName) = withContext(Dispatchers.IO) {
+                val s = viewModel.getStopsOfRoute(routeId, currentDirection, reverse = false)
+                val t = viewModel.getFinalStopNameOfRoute(routeId, currentDirection)
+                s to t
+            }
+            Log.i(LOGTAG, "mapFragment: fetched stops.size=${stops.size} for routeId=$routeId; terminus=$terminusName")
+            withContext(Dispatchers.Main) {
+                routesAdapter.insertStopsForRoute(routeId, stops, currentDirection, terminusName)
+                val pos = routesAdapter.findRoutePosition(routeId)
+                if(pos >= 0) {
+                    (routesLayoutBinding.transportLinesRecyclerView.layoutManager)?.scrollToPosition(pos)
+                }
+            }
+        }
+    }
+
+    override fun onDirectionToggle(routeId: String, directionId: Boolean) {
+        Log.i(LOGTAG, "onDirectionToggle called for $routeId, switching from direction=$currentDirection")
+        currentDirection = !directionId
+        routesAdapter.removeStopsForRoute(routeId)
+        loadStopsForRoute(routeId)
     }
 }

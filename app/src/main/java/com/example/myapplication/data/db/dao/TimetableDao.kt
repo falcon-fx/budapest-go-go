@@ -65,21 +65,21 @@ interface TimetableDao {
         SELECT stops.* FROM stops
         INNER JOIN timetable ON stops.id = timetable.stop_id
         INNER JOIN trips ON timetable.trip_id = trips.id
-        WHERE trips.route_id = :routeId
+        WHERE trips.route_id = :routeId AND trips.direction_id = :directionId
         GROUP BY stops.id
         ORDER BY timetable.stop_seq ASC
     """)
-    suspend fun getStopsOfRouteAsc(routeId: String): List<StopEntity>
+    suspend fun getStopsOfRouteAsc(routeId: String, directionId: Boolean): List<StopEntity>
 
     @Query("""
         SELECT stops.* FROM stops
         INNER JOIN timetable ON stops.id = timetable.stop_id
         INNER JOIN trips ON timetable.trip_id = trips.id
-        WHERE trips.route_id = :routeId
+        WHERE trips.route_id = :routeId AND trips.direction_id = :directionId
         GROUP BY stops.id
         ORDER BY timetable.stop_seq DESC
     """)
-    suspend fun getStopsOfRouteDesc(routeId: String): List<StopEntity>
+    suspend fun getStopsOfRouteDesc(routeId: String, directionId: Boolean): List<StopEntity>
 
     @Query("""
         SELECT * FROM routes ORDER BY type
@@ -132,4 +132,14 @@ interface TimetableDao {
 
     @Query("SELECT type FROM routes WHERE id = :routeId LIMIT 1")
     suspend fun getTypeOfRoute(routeId: String): RouteTypes
+
+    @Query("""
+        SELECT stops.name FROM stops
+        INNER JOIN timetable ON stops.id = timetable.stop_id
+        INNER JOIN trips ON timetable.trip_id = trips.id
+        WHERE trips.route_id = :routeId AND trips.direction_id = :directionId
+        ORDER BY timetable.stop_seq DESC
+        LIMIT 1
+    """)
+    suspend fun getFinalStopNameOfRoute(routeId: String, directionId: Boolean): String?
 }
