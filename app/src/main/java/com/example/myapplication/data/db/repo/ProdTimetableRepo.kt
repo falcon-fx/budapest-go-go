@@ -29,37 +29,14 @@ class ProdTimetableRepo(
 ): TimetableRepo {
     private val LOGTAG = "ProdTimetableRepo"
     private val dbWriteMutex = Mutex()
-
-    companion object {
-        const val DUPLICATE_RADIUS_METERS = 150.0
-
-        private fun distance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-            val R = 6371000.0
-            val dLat = Math.toRadians(lat2 - lat1)
-            val dLon = Math.toRadians(lon2 - lon1)
-            val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                    Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
-                    Math.sin(dLon / 2) * Math.sin(dLon / 2)
-            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-        }
-    }
-
-    private data class StopLocationEntry(
-        val lat: Double,
-        val lon: Double,
-        val canonicalId: String,
-        val name: String
-    )
-
+    
     private suspend fun replaceStopsInBatches(
         lines: Sequence<String>,
         batchSize: Int,
         progressCallback: suspend (LoadingProgress) -> Unit,
         totalLines: Int
-    ): Map<String, String> {
+    ) {
         progressCallback(LoadingProgress.calculating(LoadingProgress.Phase.PARSING_STOPS, 0f))
-        val stopIdMap = mutableMapOf<String, String>()
-        val nameGroups = mutableMapOf<String, MutableList<StopLocationEntry>>()
         bkkDatabase.withTransaction {
             withContext(Dispatchers.IO) {
                 val iterator = lines.iterator()
@@ -74,31 +51,12 @@ class ProdTimetableRepo(
                     if (tokens.isEmpty()) continue
 
                     try {
-                        val gtfsId = tokens[columnIndex["stop_id"] ?: continue]
-                        val name = tokens[columnIndex["stop_name"] ?: continue]
-                        val lat = tokens[columnIndex["stop_lat"] ?: continue].toDouble()
-                        val lon = tokens[columnIndex["stop_lon"] ?: continue].toDouble()
-
-                        val existing = nameGroups[name]
-                        var canonicalId = existing?.firstOrNull { entry ->
-                            distance(lat, lon, entry.lat, entry.lon) <= DUPLICATE_RADIUS_METERS
-                        }?.canonicalId
-
-                        if (canonicalId == null && existing != null) {
-                            canonicalId = existing.firstOrNull { entry ->
-                                distance(lat, lon, entry.lat, entry.lon) <= DUPLICATE_RADIUS_METERS &&
-                                (name.contains(entry.name, ignoreCase = true) || entry.name.contains(name, ignoreCase = true))
-                            }?.canonicalId
-                        }
-
-                        if (canonicalId != null) {
-                            stopIdMap[gtfsId] = canonicalId
-                        } else {
-                            val group = existing ?: mutableListOf<StopLocationEntry>().also { nameGroups[name] = it }
-                            group.add(StopLocationEntry(lat = lat, lon = lon, canonicalId = gtfsId, name = name))
-                            stopIdMap[gtfsId] = gtfsId
-                            batch += StopEntity(id = gtfsId, name = name, lat = lat, lon = lon)
-                        }
+                        batch += StopEntity(
+                            id = tokens[columnIndex["stop_id"] ?: continue],
+                            name = tokens[columnIndex["stop_name"] ?: continue],
+                            lat = tokens[columnIndex["stop_lat"] ?: continue].toDouble(),
+                            lon = tokens[columnIndex["stop_lon"] ?: continue].toDouble()
+                        )
                     } catch (e: Exception) {
                         Log.w(LOGTAG, "Stops: Skip malformed line: $e")
                     }
@@ -120,7 +78,6 @@ class ProdTimetableRepo(
             }
         }
         progressCallback(LoadingProgress.calculating(LoadingProgress.Phase.PARSING_STOPS, 1f))
-        return stopIdMap
     }
 
     private suspend fun replaceRoutesInBatches(
@@ -231,8 +188,7 @@ class ProdTimetableRepo(
         lines: Sequence<String>,
         batchSize: Int,
         progressCallback: suspend (LoadingProgress) -> Unit,
-        totalLines: Int,
-        stopIdMap: Map<String, String>
+        totalLines: Int
     ) {
         bkkDatabase.withTransaction {
             withContext(Dispatchers.IO) {
@@ -250,10 +206,9 @@ class ProdTimetableRepo(
                     if (tokens.isEmpty()) continue
 
                     try {
-                        val gtfsStopId = tokens[columnIndex["stop_id"] ?: continue]
                         batch += TimetableEntity(
                             tripId = tokens[columnIndex["trip_id"] ?: continue],
-                            stopId = stopIdMap[gtfsStopId] ?: gtfsStopId,
+                            stopId = tokens[columnIndex["stop_id"] ?: continue],
                             arrTime = tokens[columnIndex["arrival_time"] ?: continue],
                             depTime = tokens[columnIndex["departure_time"] ?: continue],
                             stopSeq = tokens[columnIndex["stop_sequence"] ?: continue].toInt()
@@ -381,7 +336,6 @@ class ProdTimetableRepo(
 
                 // Parse each file with accurate progress
                 val filesToParse = listOf("stops.txt", "routes.txt", "trips.txt", "stop_times.txt")
-                var stopIdMap = emptyMap<String, String>()
                 for (fileName in filesToParse) {
                     val file = File(cacheDir, fileName)
                     if (!file.exists()) continue
@@ -394,10 +348,10 @@ class ProdTimetableRepo(
                     file.bufferedReader().useLines { lines ->
                         Log.i(LOGTAG, "Reading $fileName")
                         when (fileName) {
-                            "stops.txt" -> { stopIdMap = replaceStopsInBatches(lines, batchSize, progressCallback, totalLines) }
+                            "stops.txt" -> replaceStopsInBatches(lines, batchSize, progressCallback, totalLines)
                             "routes.txt" -> replaceRoutesInBatches(lines, batchSize, progressCallback, totalLines)
                             "trips.txt" -> replaceTripsInBatches(lines, batchSize, progressCallback, totalLines)
-                            "stop_times.txt" -> replaceTimetableInBatches(lines, batchSize, progressCallback, totalLines, stopIdMap)
+                            "stop_times.txt" -> replaceTimetableInBatches(lines, batchSize, progressCallback, totalLines)
                         }
                     }
                 }
