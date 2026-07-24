@@ -1,0 +1,457 @@
+package com.falconfx.gtfsviewer.data.db.repo
+
+import android.util.Log
+import androidx.room.withTransaction
+import com.falconfx.gtfsviewer.data.api.BkkApiService
+import com.falconfx.gtfsviewer.data.db.BkkDatabase
+import com.falconfx.gtfsviewer.data.db.RouteEntity
+import com.falconfx.gtfsviewer.data.db.RouteTypes
+import com.falconfx.gtfsviewer.data.db.StopEntity
+import com.falconfx.gtfsviewer.data.db.TimetableEntity
+import com.falconfx.gtfsviewer.data.db.TripEntity
+import com.falconfx.gtfsviewer.data.util.DataParsers
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import okhttp3.ResponseBody
+import java.io.BufferedInputStream
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+
+class ProdTimetableRepo(
+    private val apiService: BkkApiService,
+    private val bkkDatabase: BkkDatabase
+): TimetableRepo {
+    private val LOGTAG = "ProdTimetableRepo"
+    private val dbWriteMutex = Mutex()
+    
+    private suspend fun replaceStopsInBatches(
+        lines: Sequence<String>,
+        batchSize: Int,
+        progressCallback: suspend (LoadingProgress) -> Unit,
+        totalLines: Int
+    ) {
+        progressCallback(LoadingProgress.calculating(LoadingProgress.Phase.PARSING_STOPS, 0f))
+        bkkDatabase.withTransaction {
+            withContext(Dispatchers.IO) {
+                val iterator = lines.iterator()
+                if (!iterator.hasNext()) return@withContext
+                val header = DataParsers.parseCsvLine(iterator.next())
+                val columnIndex = header.withIndex().associate { it.value to it.index }
+                var numOfBatches = 0
+                val batch = mutableListOf<StopEntity>()
+
+                for (line in iterator.asSequence()) {
+                    val tokens = DataParsers.parseCsvLine(line)
+                    if (tokens.isEmpty()) continue
+
+                    try {
+                        batch += StopEntity(
+                            id = tokens[columnIndex["stop_id"] ?: continue],
+                            name = tokens[columnIndex["stop_name"] ?: continue],
+                            lat = tokens[columnIndex["stop_lat"] ?: continue].toDouble(),
+                            lon = tokens[columnIndex["stop_lon"] ?: continue].toDouble()
+                        )
+                    } catch (e: Exception) {
+                        Log.w(LOGTAG, "Stops: Skip malformed line: $e")
+                    }
+
+                    if (batch.size >= batchSize) {
+                        bkkDatabase.timetableDao.insertStops(batch)
+                        ++numOfBatches
+                        Log.i(LOGTAG, "Inserted lines into Stops, $numOfBatches")
+                        batch.clear()
+                    }
+                }
+
+                if (batch.isNotEmpty()) {
+                    bkkDatabase.timetableDao.insertStops(batch)
+                    ++numOfBatches
+                    Log.i(LOGTAG, "Inserted final lines into Stops, $numOfBatches")
+                    batch.clear()
+                }
+            }
+        }
+        progressCallback(LoadingProgress.calculating(LoadingProgress.Phase.PARSING_STOPS, 1f))
+    }
+
+    private suspend fun replaceRoutesInBatches(
+        lines: Sequence<String>,
+        batchSize: Int,
+        progressCallback: suspend (LoadingProgress) -> Unit,
+        totalLines: Int
+    ) {
+        progressCallback(LoadingProgress.calculating(LoadingProgress.Phase.PARSING_ROUTES, 0f))
+        bkkDatabase.withTransaction {
+            withContext(Dispatchers.IO) {
+                val iterator = lines.iterator()
+                if (!iterator.hasNext()) return@withContext
+                val header = DataParsers.parseCsvLine(iterator.next())
+                val columnIndex = header.withIndex().associate { it.value to it.index }
+                var numOfBatches = 0
+                val batch = mutableListOf<RouteEntity>()
+
+                for (line in iterator.asSequence()) {
+                    val tokens = DataParsers.parseCsvLine(line)
+                    if (tokens.isEmpty()) continue
+
+                    try {
+                        batch += RouteEntity(
+                            id = tokens[columnIndex["route_id"] ?: continue],
+                            shortName = tokens[columnIndex["route_short_name"] ?: continue],
+                            desc = tokens[columnIndex["route_desc"] ?: continue],
+                            type = RouteTypes.entries.first { it.typeInt == tokens[columnIndex["route_type"] ?: 999].toInt() },
+                            color = tokens[columnIndex["route_color"] ?: continue],
+                            textColor = tokens[columnIndex["route_text_color"] ?: continue],
+                        )
+                    } catch (e: Exception) {
+                        Log.w(LOGTAG, "Routes: Skip malformed line: $e")
+                    }
+
+                    if (batch.size >= batchSize) {
+
+                        bkkDatabase.timetableDao.insertRoutes(batch)
+                        ++numOfBatches
+                        Log.i(LOGTAG, "Inserted lines into Routes, $numOfBatches")
+                        batch.clear()
+                    }
+                }
+
+                if (batch.isNotEmpty()) {
+                    bkkDatabase.timetableDao.insertRoutes(batch)
+                    ++numOfBatches
+                    Log.i(LOGTAG, "Inserted final lines into Routes, $numOfBatches")
+                    batch.clear()
+                }
+            }
+        }
+        progressCallback(LoadingProgress.calculating(LoadingProgress.Phase.PARSING_ROUTES, 1f))
+    }
+
+    private suspend fun replaceTripsInBatches(
+        lines: Sequence<String>,
+        batchSize: Int,
+        progressCallback: suspend (LoadingProgress) -> Unit,
+        totalLines: Int
+    ) {
+        progressCallback(LoadingProgress.calculating(LoadingProgress.Phase.PARSING_TRIPS, 0f))
+        bkkDatabase.withTransaction {
+            withContext(Dispatchers.IO) {
+                val iterator = lines.iterator()
+                if (!iterator.hasNext()) return@withContext
+                val header = DataParsers.parseCsvLine(iterator.next())
+                val columnIndex = header.withIndex().associate { it.value to it.index }
+                var numOfBatches = 0
+                val batch = mutableListOf<TripEntity>()
+
+                for (line in iterator.asSequence()) {
+                    val tokens = DataParsers.parseCsvLine(line)
+                    if (tokens.isEmpty()) continue
+
+                    try {
+                        batch += TripEntity(
+                            id = tokens[columnIndex["trip_id"] ?: continue],
+                            routeId = tokens[columnIndex["route_id"] ?: continue],
+                            headsign = tokens[columnIndex["trip_headsign"] ?: continue],
+                            directionId = tokens[columnIndex["direction_id"] ?: continue].toInt() == 0
+                        )
+                    } catch (e: Exception) {
+                        Log.w(LOGTAG, "Trips: Skip malformed line: $e")
+                    }
+
+                    if (batch.size >= batchSize) {
+
+                        bkkDatabase.timetableDao.insertTrips(batch)
+                        ++numOfBatches
+                        Log.i(LOGTAG, "Inserted lines into Trips, $numOfBatches")
+                        batch.clear()
+                    }
+                }
+
+                if (batch.isNotEmpty()) {
+                    bkkDatabase.timetableDao.insertTrips(batch)
+                    ++numOfBatches
+                    Log.i(LOGTAG, "Inserted final lines into Trips, $numOfBatches")
+                    batch.clear()
+                }
+            }
+        }
+        progressCallback(LoadingProgress.calculating(LoadingProgress.Phase.PARSING_TRIPS, 1f))
+    }
+
+    private suspend fun replaceTimetableInBatches(
+        lines: Sequence<String>,
+        batchSize: Int,
+        progressCallback: suspend (LoadingProgress) -> Unit,
+        totalLines: Int
+    ) {
+        bkkDatabase.withTransaction {
+            withContext(Dispatchers.IO) {
+                val iterator = lines.iterator()
+                var numOfBatches = 0
+                var totalProcessed = 0
+                if (!iterator.hasNext()) return@withContext
+                val header = DataParsers.parseCsvLine(iterator.next())
+                val columnIndex = header.withIndex().associate { it.value to it.index }
+
+                val batch = mutableListOf<TimetableEntity>()
+
+                for (line in iterator.asSequence()) {
+                    val tokens = DataParsers.parseCsvLine(line)
+                    if (tokens.isEmpty()) continue
+
+                    try {
+                        batch += TimetableEntity(
+                            tripId = tokens[columnIndex["trip_id"] ?: continue],
+                            stopId = tokens[columnIndex["stop_id"] ?: continue],
+                            arrTime = tokens[columnIndex["arrival_time"] ?: continue],
+                            depTime = tokens[columnIndex["departure_time"] ?: continue],
+                            stopSeq = tokens[columnIndex["stop_sequence"] ?: continue].toInt()
+                        )
+                        totalProcessed++
+                    } catch (e: Exception) {
+                        Log.w(LOGTAG, "Skip malformed line: $e")
+                    }
+
+                    if (batch.size >= batchSize) {
+                        bkkDatabase.timetableDao.insertTimetable(batch)
+                        ++numOfBatches
+                        Log.i(LOGTAG, "Inserted lines into Timetable, $numOfBatches")
+
+                        // Emit progress every 10 batches to reduce overhead
+                        if (numOfBatches % 10 == 0) {
+                            val progress = totalProcessed.toFloat() / totalLines.toFloat()
+                            progressCallback(LoadingProgress.calculating(
+                                LoadingProgress.Phase.PARSING_TIMETABLE,
+                                progress.coerceAtMost(1f)
+                            ))
+                        }
+
+                        batch.clear()
+                    }
+                }
+
+                if (batch.isNotEmpty()) {
+                    bkkDatabase.timetableDao.insertTimetable(batch)
+                    ++numOfBatches
+                    Log.i(LOGTAG, "Inserted final lines into Timetable, $numOfBatches")
+                    batch.clear()
+                }
+
+                progressCallback(LoadingProgress.calculating(
+                    LoadingProgress.Phase.PARSING_TIMETABLE,
+                    1.0f
+                ))
+            }
+        }
+    }
+
+    private suspend fun saveResponseBodyToFile(responseBody: ResponseBody, dest: File) {
+        withContext(Dispatchers.IO) {
+            dest.parentFile?.mkdirs()
+
+            val tmp = File(dest.parentFile, dest.name + ".tmp")
+            if (tmp.exists()) tmp.delete()
+
+            responseBody.byteStream().use { inputStream ->
+                BufferedInputStream(inputStream).use { bufferedInStream ->
+                    FileOutputStream(tmp).use { fileOutStream ->
+                        val buffer = ByteArray(8 * 1024)
+                        var read: Int
+                        while (bufferedInStream.read(buffer).also { read = it } != -1) {
+                            fileOutStream.write(buffer, 0, read)
+                        }
+                        try {
+                            fileOutStream.fd.sync()
+                        } catch (_: Throwable) {  }
+                    }
+                }
+            }
+
+            if (!tmp.renameTo(dest)) {
+                tmp.copyTo(dest, overwrite = true)
+                tmp.delete()
+                if (!dest.exists()) throw java.io.IOException("Failed to move temp file ${tmp.path} -> ${dest.path}")
+            }
+        }
+    }
+
+
+    private suspend fun extractAndParseZip(
+        cacheDir: File,
+        zipResponseBody: ResponseBody,
+        batchSize: Int,
+        progressCallback: suspend (LoadingProgress) -> Unit
+    ) {
+
+        val zipFile = File(cacheDir, "timetable.zip").apply { parentFile?.mkdirs() }
+
+
+        try {
+            progressCallback(LoadingProgress.calculating(LoadingProgress.Phase.DOWNLOADING, 0f))
+            Log.i(LOGTAG, "Saving zip to ${zipFile.path}")
+            saveResponseBodyToFile(zipResponseBody, zipFile)
+            progressCallback(LoadingProgress.calculating(LoadingProgress.Phase.DOWNLOADING, 1f))
+
+            Log.i(LOGTAG, "Saved zip to ${zipFile.path}, size=${zipFile.length()}")
+            if (!zipFile.exists() || zipFile.length() == 0L) {
+                throw java.io.IOException("Saved zip file is empty or missing")
+            }
+
+            // Disable FK for bulk load
+            val db = bkkDatabase.openHelper.writableDatabase
+            db.execSQL("PRAGMA foreign_keys = OFF")
+
+            try {
+                progressCallback(LoadingProgress.calculating(LoadingProgress.Phase.EXTRACTING, 0f))
+
+                // Extract all files first
+                ZipInputStream(FileInputStream(zipFile)).use { zipInStream ->
+                    var entry: ZipEntry?
+                    while (zipInStream.nextEntry.also { entry = it } != null) {
+                        val fileName = entry!!.name
+                        Log.i(LOGTAG, "Extracting $fileName")
+                        val file = File(cacheDir, fileName).apply { parentFile?.mkdirs() }
+                        FileOutputStream(file).use { fileOutStream ->
+                            val buf = ByteArray(8 * 1024)
+                            var len: Int
+                            while (zipInStream.read(buf).also { len = it } > 0) {
+                                fileOutStream.write(buf, 0, len)
+                            }
+                            try {
+                                fileOutStream.fd.sync()
+                            } catch (_: Throwable) {
+                            }
+                        }
+                        zipInStream.closeEntry()
+                    }
+                }
+
+                progressCallback(LoadingProgress.calculating(LoadingProgress.Phase.EXTRACTING, 1f))
+
+                // Parse each file with accurate progress
+                val filesToParse = listOf("stops.txt", "routes.txt", "trips.txt", "stop_times.txt")
+                for (fileName in filesToParse) {
+                    val file = File(cacheDir, fileName)
+                    if (!file.exists()) continue
+
+                    // Count lines first (fast) for accurate progress
+                    val totalLines = file.useLines { it.count() }
+                    Log.i(LOGTAG, "File $fileName has $totalLines lines")
+
+                    // Parse with accurate progress
+                    file.bufferedReader().useLines { lines ->
+                        Log.i(LOGTAG, "Reading $fileName")
+                        when (fileName) {
+                            "stops.txt" -> replaceStopsInBatches(lines, batchSize, progressCallback, totalLines)
+                            "routes.txt" -> replaceRoutesInBatches(lines, batchSize, progressCallback, totalLines)
+                            "trips.txt" -> replaceTripsInBatches(lines, batchSize, progressCallback, totalLines)
+                            "stop_times.txt" -> replaceTimetableInBatches(lines, batchSize, progressCallback, totalLines)
+                        }
+                    }
+                }
+
+                progressCallback(LoadingProgress.calculating(LoadingProgress.Phase.COMPLETE, 1f))
+
+                // Clean up extracted files from cache
+                Log.i(LOGTAG, "Cleaning up cache files")
+                val filesToDelete = listOf("stops.txt", "routes.txt", "trips.txt", "stop_times.txt")
+                for (fileName in filesToDelete) {
+                    try {
+                        File(cacheDir, fileName).delete()
+                        Log.i(LOGTAG, "Deleted cache file: $fileName")
+                    } catch (e: Exception) {
+                        Log.w(LOGTAG, "Failed to delete cache file $fileName: ${e.message}")
+                    }
+                }
+
+            } finally {
+                // Re-enable FK
+                db.execSQL("PRAGMA foreign_keys = ON")
+            }
+
+            // Clean up ZIP file after successful parsing
+            try {
+                zipFile.delete()
+                Log.i(LOGTAG, "Deleted ZIP file from cache")
+            } catch (e: Exception) {
+                Log.w(LOGTAG, "Failed to delete ZIP file: ${e.message}")
+            }
+
+        } catch(e: java.io.IOException) {
+            Log.e(LOGTAG, "IO error while downloading/parsing: ${e.message}", e)
+            try { zipFile.delete() } catch (_: Throwable) {}
+            throw e
+        } finally {
+            try { zipResponseBody.close() } catch (_: Throwable) {}
+        }
+
+    }
+
+    override suspend fun fetchAndStoreTimetable(
+        cacheDir: File,
+        batchSize: Int,
+        progressCallback: (suspend (LoadingProgress) -> Unit)?
+    ) {
+
+        val response = apiService.downloadTimetable()
+        if (response.isSuccessful && response.body() != null) {
+
+            withContext(Dispatchers.IO) {
+                dbWriteMutex.withLock {
+                    progressCallback?.invoke(LoadingProgress.calculating(LoadingProgress.Phase.CLEARING, 0f))
+
+                    Log.i(LOGTAG, "Starting DB wipe")
+                    bkkDatabase.fastClearAll()
+                    Log.i(LOGTAG, "Wiped DB")
+
+                    progressCallback?.invoke(LoadingProgress.calculating(LoadingProgress.Phase.CLEARING, 1f))
+
+                    extractAndParseZip(cacheDir, response.body()!!, batchSize, progressCallback ?: {})
+                }
+
+
+            }
+        }
+    }
+
+    override suspend fun getStopsOfRoute(
+        routeId: String,
+        directionId: Boolean,
+        reverse: Boolean
+    ): List<StopEntity> {
+        return if (reverse) bkkDatabase.timetableDao.getStopsOfRouteDesc(routeId, directionId) else bkkDatabase.timetableDao.getStopsOfRouteAsc(routeId, directionId)
+    }
+
+    override suspend fun getAllRoutes(): List<RouteEntity> {
+        return bkkDatabase.timetableDao.getAllRoutes()
+    }
+
+    override suspend fun getStopById(stopId: String): StopEntity {
+        return bkkDatabase.timetableDao.getStopById(stopId)
+    }
+
+    override suspend fun getRouteById(routeId: String): RouteEntity {
+        return bkkDatabase.timetableDao.getRouteById(routeId)
+    }
+
+    override suspend fun getTripByRouteId(routeId: String): TripEntity {
+        return bkkDatabase.timetableDao.getTripByRouteId(routeId)
+    }
+
+    override suspend fun getTimesForRoute(routeId: String, reverse: Boolean): List<TimetableEntity> {
+        return if (reverse) bkkDatabase.timetableDao.getTimesForRouteDesc(routeId) else bkkDatabase.timetableDao.getTimesForRouteAsc(routeId)
+    }
+
+    override suspend fun getTypeOfRoute(routeId: String): RouteTypes {
+        return bkkDatabase.timetableDao.getTypeOfRoute(routeId)
+    }
+
+    override suspend fun getFinalStopNameOfRoute(routeId: String, directionId: Boolean): String? {
+        return bkkDatabase.timetableDao.getFinalStopNameOfRoute(routeId, directionId)
+    }
+}

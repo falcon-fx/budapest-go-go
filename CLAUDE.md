@@ -95,10 +95,10 @@ This is a Budapest public transport (BKK Futár) Android application targeting l
 
 ```bash
 # Run single test class
-./gradlew test --tests com.example.myapplication.ExampleUnitTest
+./gradlew test --tests com.falconfx.gtfsviewer.ExampleUnitTest
 
 # Run specific instrumented test
-./gradlew connectedAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.example.myapplication.ExampleInstrumentedTest
+./gradlew connectedAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.falconfx.gtfsviewer.ExampleInstrumentedTest
 ```
 
 ## Architecture
@@ -106,7 +106,7 @@ This is a Budapest public transport (BKK Futár) Android application targeting l
 ### Package Structure
 
 ```
-com.example.myapplication/
+com.falconfx.gtfsviewer/
 ├── BkkApp.kt                    # Application class (Hilt entry, Conscrypt setup, MultiDex)
 ├── MainActivity.kt              # Single activity with Navigation Component
 ├── data/

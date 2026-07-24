@@ -1,5 +1,4 @@
 import org.gradle.api.tasks.Exec
-import java.io.File
 
 plugins {
     alias(libs.plugins.android.application)
@@ -11,11 +10,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.myapplication"
+    namespace = "com.falconfx.gtfsviewer"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.myapplication"
+        applicationId = "com.falconfx.gtfsviewer"
         minSdk = 18
         targetSdk = 34
         versionCode = 1
