@@ -87,8 +87,7 @@ class RoutesAdapter(
         val start = routeIndex + 1
         var end = start
         while(end < items.size) {
-            val it = items[end]
-            val isOurItem = when(it) {
+            val isOurItem = when(val it = items[end]) {
                 is ListItem.DirectionItem -> it.parentRouteId == routeId
                 is ListItem.StopItem -> it.parentRouteId == routeId
                 else -> false

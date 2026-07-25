@@ -18,30 +18,26 @@ import java.io.File
 import javax.inject.Inject
 
 @HiltViewModel
-class MapViewModel @Inject constructor(
+class TransportLinesViewModel @Inject constructor(
     private val timetable: TimetableRepo,
     private val auth: AuthRepo,
     private val vehicles: VehicleRepo,
     private val certRepo: CertificateRepo
-): ViewModel() {
-    val logTag = "MAPSCREEN"
+) : ViewModel() {
+    val logTag = "TRANSPORT_LINES"
     private val batchSize = 50000
-    enum class Screen { MAP, TIMETABLE }
-    private val _currentScreen = MutableLiveData(Screen.MAP)
-    val currentScreen: LiveData<Screen> = _currentScreen
+
     private val _loading = MutableLiveData(false)
     val loading: LiveData<Boolean> = _loading
 
     private val _routes = MutableLiveData<List<RouteEntity>>(emptyList())
-    val routes : LiveData<List<RouteEntity>> = _routes
+    val routes: LiveData<List<RouteEntity>> = _routes
 
     private val _certError = MutableLiveData<Event<String>>()
     val certError: LiveData<Event<String>> = _certError
 
     private val _loadingProgress = MutableLiveData<com.falconfx.gtfsviewer.data.db.repo.LoadingProgress>()
     val loadingProgress: LiveData<com.falconfx.gtfsviewer.data.db.repo.LoadingProgress> = _loadingProgress
-
-    fun switchScreens(screen: Screen) { _currentScreen.value = screen }
 
     private fun requireCertsOrError(): Boolean {
         if (!certRepo.hasCertificates()) {
@@ -69,7 +65,7 @@ class MapViewModel @Inject constructor(
         viewModelScope.launch {
             Log.i(logTag, "loadRoutes called")
             val allRoutes = timetable.getAllRoutes()
-            Log.i(logTag, "allRoutes: ${allRoutes.size} routes, ${allRoutes}")
+            Log.i(logTag, "allRoutes: ${allRoutes.size} routes")
             _routes.postValue(allRoutes)
         }
     }

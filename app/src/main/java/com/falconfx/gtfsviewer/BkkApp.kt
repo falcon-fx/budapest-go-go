@@ -11,6 +11,9 @@ import java.security.Security
 
 @HiltAndroidApp
 class BkkApp: Application() {
+    companion object {
+        const val OSMDROID = "osmdroid"
+    }
     override fun attachBaseContext(base: Context) {
         super.attachBaseContext(base)
         MultiDex.install(this)
@@ -20,10 +23,11 @@ class BkkApp: Application() {
     override fun onCreate() {
         super.onCreate()
         Configuration.getInstance().apply {
+            load(this@BkkApp, getSharedPreferences(OSMDROID, MODE_PRIVATE))
             userAgentValue = packageName
             cacheMapTileCount = 12.toShort()
             cacheMapTileOvershoot = 4.toShort()
-            osmdroidTileCache = File(cacheDir, "osmdroid")
+            osmdroidTileCache = File(cacheDir, OSMDROID)
         }
     }
 }

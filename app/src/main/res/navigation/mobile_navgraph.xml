@@ -19,9 +19,9 @@
 
     <fragment
         android:id="@+id/nav_map"
-        android:name="com.falconfx.gtfsviewer.ui.map.MapFragment"
-        android:label="MapFragment"
-        tools:layout="@layout/fragment_map">
+        android:name="com.falconfx.gtfsviewer.ui.root.RootScreenFragment"
+        android:label="RootScreenFragment"
+        tools:layout="@layout/fragment_root_screen">
         <action
             android:id="@+id/action_nav_map_to_nav_auth"
             app:destination="@id/nav_auth" />
