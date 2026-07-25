@@ -454,4 +454,8 @@ class ProdTimetableRepo(
     override suspend fun getFinalStopNameOfRoute(routeId: String, directionId: Boolean): String? {
         return bkkDatabase.timetableDao.getFinalStopNameOfRoute(routeId, directionId)
     }
+
+    override suspend fun searchRouteIdsByStopName(query: String): List<String> {
+        return bkkDatabase.timetableDao.searchRouteIdsByStopName(query)
+    }
 }

@@ -21,4 +21,5 @@ interface TimetableRepo {
     suspend fun getTimesForRoute(routeId: String, reverse: Boolean): List<TimetableEntity>
     suspend fun getTypeOfRoute(routeId: String): RouteTypes
     suspend fun getFinalStopNameOfRoute(routeId: String, directionId: Boolean): String?
+    suspend fun searchRouteIdsByStopName(query: String): List<String>
 }

@@ -107,7 +107,7 @@ This is a Budapest public transport (BKK Futár) Android application targeting l
 
 ```
 com.falconfx.gtfsviewer/
-├── BkkApp.kt                    # Application class (Hilt entry, Conscrypt setup, MultiDex)
+├── BkkApp.kt                    # Application class (Hilt entry, Conscrypt setup, MultiDex, osmdroid config)
 ├── MainActivity.kt              # Single activity with Navigation Component
 ├── data/
 │   ├── AppModule.kt            # Hilt DI module (network, database, repos)
@@ -130,9 +130,13 @@ com.falconfx.gtfsviewer/
     ├── auth/                   # Certificate import and API key management
     │   ├── AuthFragment.kt     # ZIP file picker, auto-skip if certs exist
     │   └── AuthViewModel.kt    # Orchestrates cert import, shows errors/restart prompts
-    ├── map/                    # Main map view with route/stop selection
-    │   ├── MapFragment.kt      # Shows progress dialog during import, handles route/direction expansion
-    │   ├── MapViewModel.kt     # Coordinates timetable fetch with progress tracking
+    ├── root/                   # Root host fragment with bottom nav and child fragment management
+    │   ├── RootScreenFragment.kt   # Hosts bottom nav, manages OsmMapFragment & TransportLinesFragment tabs
+    │   └── RootScreenViewModel.kt  # Tab state (MAP, TRANSPORT_LINES), future cross-fragment data bridge
+    ├── map/                    # Map and transport lines screens
+    │   ├── OsmMapFragment.kt       # Pure osmdroid map display + location permission handling
+    │   ├── TransportLinesFragment.kt # Routes list, search, expand/collapse, timetable fetch + progress dialog
+    │   ├── TransportLinesViewModel.kt # Routes loading, timetable fetch, cert error, progress tracking
     │   ├── RoutesAdapter.kt    # RecyclerView adapter for route/direction/stop list
     │   └── item_direction.xml  # Direction header layout (displays "To [TerminusName]")
     └── Event.kt                # Single-event wrapper for LiveData
@@ -147,7 +151,8 @@ com.falconfx.gtfsviewer/
    - Sets SharedPreferences flag, triggers app restart to reload OkHttpClient
    - Auto-skip navigation if certificates already exist (prevents back button loop)
 
-2. **Timetable fetch**: MapViewModel triggers TimetableRepo.fetchAndStoreTimetable() with progress callback:
+2. **Timetable fetch**: TransportLinesViewModel triggers TimetableRepo.fetchAndStoreTimetable() with progress callback:
+   - User confirms via AlertDialog (sync if data exists, download if first time)
    - Shows non-dismissible progress dialog with real-time percentage updates
    - Downloads budapest_gtfs.zip (~60-70 MB) to cache
    - **Optimized clear**: Single-pass DELETE with FK disabled, single WAL checkpoint (11s vs 98s)
@@ -234,14 +239,78 @@ com.falconfx.gtfsviewer/
 - `DirectionItem` stores routeId, directionId, terminusName for "To X" display
 - Expanding a route inserts direction header + stops for that direction
 - Collapsing removes both direction header and all stops
-- Direction header click triggers `onDirectionToggle()` in MapFragment
+- Direction header click triggers `onDirectionToggle()` in TransportLinesFragment
 
 **Data Flow**:
-1. User clicks route → Fragment calls `MapViewModel.getStopsOfRoute(routeId, directionId=false, reverse=false)`
+1. User clicks route → Fragment calls `TransportLinesViewModel.getStopsOfRoute(routeId, directionId=false, reverse=false)`
 2. ViewModel calls repo → DAO returns stops (grouped by id, ordered by stop_seq)
-3. Fragment simultaneously fetches `MapViewModel.getFinalStopNameOfRoute(routeId, directionId)` for terminus
+3. Fragment simultaneously fetches `TransportLinesViewModel.getFinalStopNameOfRoute(routeId, directionId)` for terminus
 4. Both passed to adapter → renders DirectionItem + StopItems
 5. User clicks direction header → Fragment toggles directionId, repeats flow with new direction
+
+### RootScreenFragment Child Fragment Architecture
+
+**RootScreenFragment** acts as a host/selector with bottom navigation:
+- Hosts two child fragments: **OsmMapFragment** (MAP tab) and **TransportLinesFragment** (TRANSPORT_LINES tab)
+- Child fragments are managed via `childFragmentManager` with `hide()`/`show()` + `setMaxLifecycle()`
+- Active tab gets `Lifecycle.State.RESUMED`, hidden tab gets `Lifecycle.State.STARTED`
+- At STARTED the hidden fragment's view exists (GONE) but no UI rendering occurs
+- Progress dialog (AlertDialog in TransportLinesFragment) is dismissed in `onPause()` and restored in `onResume()` based on loading state — prevents dialog from overlaying the map when switching tabs mid-fetch
+- Future cross-fragment data bridge: RootScreenViewModel stores bridge data (e.g., selected route) that the destination fragment picks up when it resumes
+
+**Tab Switching Flow:**
+1. User taps bottom nav → RootScreenViewModel.switchTab()
+2. Observer fires → RootScreenFragment.navigateToTab()
+3. Current fragment: hide() + setMaxLifecycle(STARTED)
+4. Target fragment: show() + setMaxLifecycle(RESUMED)
+5. Target fragment's onResume() fires (map resumes, GPS re-enables, routes list refreshes)
+
+### Timetable Sync Confirmation Dialog
+
+TransportLinesFragment shows a confirmation dialog before fetching the timetable:
+- **If routes exist in DB** (has data): Title = "Are you sure you want to sync the timetable?" + subtitle "This action could take some time."
+- **If no routes** (first time): Title = "Download timetable?" + subtitle "This action could take some time."
+- Uses `android.R.string.yes` / `android.R.string.no` for buttons
+- "No" dismisses dialog (no action)
+- "Yes" proceeds with `TransportLinesViewModel.fetchTimetable()`
+
+### Search and Type Filter System
+
+**Search Architecture:**
+- Search triggers on **search button tap** or **keyboard Done** (`IME_ACTION_SEARCH`), not on keystroke (no type-ahead)
+- Short-name matching: done **in-memory** on `allRoutesCache` (routes list is small, ~hundreds)
+  - Case-insensitive prefix match: query "2" → "2", "20E", "237"
+  - Letter-prefix numeric suffix match: query "2" → "M2" (strips leading letters, checks `digits.startsWith(query)`)
+- Stop-name matching: single **DAO query** `searchRouteIdsByStopName(query)` via multi-table join (stops ↔ timetable ↔ trips)
+  - `stops.name LIKE '%' || :query || '%'`
+  - Index on `stops(name)` via `@Entity(indices = [Index("name")])` on StopEntity
+  - Only `DISTINCT trips.route_id` returned (lightweight), then intersected with in-memory route cache
+- Union of short-name + stop-name matched route IDs → displayed in RecyclerView
+- Type filter: `HorizontalScrollView` of `ToggleButton` pills, one per `RouteTypes` (excluding UNKNOWN)
+  - Pills created programmatically in `TransportLinesFragment.createPills()`
+  - Colors sourced from the first route of each type in the DB (`RouteEntity.color` / `RouteEntity.textColor`) via `ViewModel.typeColors` LiveData
+  - Unselected: transparent background, colored border (stroke), text color = type's route color
+  - Selected: background filled with type's route color, text color = type's route text color
+  - Uses `Button` with manual `selectedPills` set + `GradientDrawable` for background (no ToggleButton — its `textOn`/`textOff` conflicted with MaterialComponents theme defaults)
+- Pills and search combine: type filter applied first, then search within filtered set
+
+**Pre-expand on Search:**
+- If stop-name search returns exactly **1 unique route** (within current type filter), that route auto-expands showing direction-A stops
+- Pre-expand does NOT happen when match is only from short-name prefix
+- Tracked via `SearchResult.preExpandRouteId` (null if no pre-expand needed)
+
+**ViewModel Flow** (TransportLinesViewModel):
+- `allRoutesCache`: full route list loaded once from DB
+- `searchQuery` and `selectedTypes`: filter state
+- `applyFilters()`: 
+  1. If types selected → filter in-memory
+  2. If search query → short-name match in-memory + stop-name DB query → intersect with type-filtered IDs → union
+  3. If stop-name-only matches == 1 within type filter → set `preExpandRouteId`
+  4. Post `SearchResult(routes, preExpandRouteId)`
+- Fragment observes `searchResult` LiveData, calls `routesAdapter.setRoutes()`, then `loadStopsForRoute()` if preExpandRouteId is set
+
+**Known Limitation:**
+- SQLite `LIKE` is Unicode-case-sensitive for accented characters. "diósd" → "Diósdi út" works (both lowercase ó). "DIÓSD" → "Diósdi út" fails on non-ASCII. Acceptable for v1.
 
 ### Certificate and API Key Management
 
@@ -289,7 +358,7 @@ com.falconfx.gtfsviewer/
 
 **"SSLHandshakeException" on API 18-21**: User must import SSL certificates via AuthFragment. App blocks network calls until certificates exist. Verify go_bkk_hu.pem is imported.
 
-**"OutOfMemoryError during timetable parse"**: Adjust batchSize in MapViewModel.fetchTimetable() (currently 50k). Lower for devices with <512MB RAM.
+**"OutOfMemoryError during timetable parse"**: Adjust batchSize in TransportLinesViewModel.fetchTimetable() (currently 50k). Lower for devices with <512MB RAM.
 
 **"Navigation loop between auth and map"**: Fixed via popUpTo in navigation graph. Auth fragment is removed from back stack when navigating to map.
 

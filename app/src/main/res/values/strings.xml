@@ -28,4 +28,9 @@
     <!-- Map screen -->
     <string name="location_permission_denied_message">Permission for location denied. Please enable it in Settings</string>
     <string name="button_open_settings">Open Settings</string>
+
+    <!-- Timetable sync confirmation -->
+    <string name="dialog_sync_title">Sync timetable?</string>
+    <string name="dialog_download_title">Download timetable?</string>
+    <string name="dialog_action_warning">This action could take some time.</string>
 </resources>

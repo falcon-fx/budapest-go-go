@@ -26,13 +26,12 @@
                 android:layout_height="match_parent"
                 android:autofillHints=""
                 android:inputType="text"
+                android:imeOptions="actionSearch"
+                android:singleLine="true"
                 android:hint="@string/textedit_findroute_hint"
                 app:layout_constraintStart_toStartOf="@id/searchToolbarConstraintLayout"
                 app:layout_constraintTop_toTopOf="@id/searchToolbarConstraintLayout"
-                app:layout_constraintBottom_toBottomOf="@id/searchToolbarConstraintLayout"
-                >
-
-            </EditText>
+                app:layout_constraintBottom_toBottomOf="@id/searchToolbarConstraintLayout" />
             <ImageButton
                 android:id="@+id/btnSearch"
                 android:layout_width="wrap_content"
@@ -59,17 +58,33 @@
 
     </androidx.appcompat.widget.Toolbar>
 
+    <HorizontalScrollView
+        android:id="@+id/pillContainer"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:paddingVertical="6dp"
+        android:scrollbars="none"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/searchToolbar">
+
+        <LinearLayout
+            android:id="@+id/pillLayout"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp" />
+
+    </HorizontalScrollView>
+
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/transportLinesRecyclerView"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        app:layout_constraintTop_toBottomOf="@id/searchToolbar"
+        app:layout_constraintTop_toBottomOf="@id/pillContainer"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         android:scrollbars="vertical" />
-
-
-
-
 </androidx.constraintlayout.widget.ConstraintLayout>

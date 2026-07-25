@@ -142,4 +142,12 @@ interface TimetableDao {
         LIMIT 1
     """)
     suspend fun getFinalStopNameOfRoute(routeId: String, directionId: Boolean): String?
+
+    @Query("""
+        SELECT DISTINCT trips.route_id FROM stops
+        INNER JOIN timetable ON stops.id = timetable.stop_id
+        INNER JOIN trips ON timetable.trip_id = trips.id
+        WHERE stops.name LIKE '%' || :query || '%'
+    """)
+    suspend fun searchRouteIdsByStopName(query: String): List<String>
 }

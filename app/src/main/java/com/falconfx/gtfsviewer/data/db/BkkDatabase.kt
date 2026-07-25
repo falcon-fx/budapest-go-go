@@ -18,7 +18,7 @@ import kotlinx.coroutines.withContext
         TimetableEntity::class,
         TripEntity::class,
         VehicleEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 @TypeConverters(

@@ -1,10 +1,16 @@
 package com.falconfx.gtfsviewer.ui.map
 
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.util.Log
+import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.inputmethod.EditorInfo
+import android.widget.Button
+import android.widget.LinearLayout
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
@@ -13,7 +19,9 @@ import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.falconfx.gtfsviewer.R
 import com.falconfx.gtfsviewer.databinding.LayoutRoutesBinding
+import com.falconfx.gtfsviewer.data.db.RouteTypes
 import com.falconfx.gtfsviewer.data.db.repo.LoadingProgress.Companion.getMessageResId
+import com.falconfx.gtfsviewer.data.util.DataParsers
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -28,6 +36,9 @@ class TransportLinesFragment : Fragment(), RoutesAdapter.ToggleListener {
     private val binding get() = _binding!!
     private lateinit var routesAdapter: RoutesAdapter
     private var progressDialog: AlertDialog? = null
+    private val selectedPills = mutableSetOf<RouteTypes>()
+    private var pillCornerRadiusPx = 0f
+    private var pillStrokePx = 0
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -42,8 +53,23 @@ class TransportLinesFragment : Fragment(), RoutesAdapter.ToggleListener {
         super.onViewCreated(view, savedInstanceState)
         _binding = LayoutRoutesBinding.bind(view)
 
+        pillCornerRadiusPx = TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP, 18f, resources.displayMetrics
+        )
+        pillStrokePx = TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP, 1.5f, resources.displayMetrics
+        ).toInt()
+
         setupRoutesRecyclerView()
+        setupSearch()
         viewModel.loadRoutes()
+
+        viewModel.typeColors.observe(viewLifecycleOwner) { colors ->
+            if (colors.isNotEmpty()) {
+                binding.pillLayout.removeAllViews()
+                createPills(colors)
+            }
+        }
 
         viewModel.loading.observe(viewLifecycleOwner) { isLoading ->
             if (isLoading) {
@@ -57,13 +83,26 @@ class TransportLinesFragment : Fragment(), RoutesAdapter.ToggleListener {
             updateProgressDialog(progress)
         }
 
-        viewModel.routes.observe(viewLifecycleOwner) { routes ->
-            Log.i(LOGTAG, "routes observer: size = ${routes.size}")
-            routesAdapter.setRoutes(routes)
+        viewModel.searchResult.observe(viewLifecycleOwner) { result ->
+            Log.i(LOGTAG, "searchResult observer: size = ${result.routes.size}")
+            routesAdapter.setRoutes(result.routes)
+            result.preExpandRouteId?.let { routeId ->
+                loadStopsForRoute(routeId)
+            }
         }
 
         binding.btnFetchTimetable.setOnClickListener {
-            viewModel.fetchTimetable(requireContext().cacheDir)
+            val hasData = viewModel.routes.value?.isNotEmpty() == true
+            val title = if (hasData) R.string.dialog_sync_title else R.string.dialog_download_title
+
+            AlertDialog.Builder(requireContext())
+                .setTitle(title)
+                .setMessage(R.string.dialog_action_warning)
+                .setPositiveButton(android.R.string.yes) { _, _ ->
+                    viewModel.fetchTimetable(requireContext().cacheDir)
+                }
+                .setNegativeButton(android.R.string.no, null)
+                .show()
         }
 
         viewModel.certError.observe(viewLifecycleOwner) { event ->
@@ -95,6 +134,7 @@ class TransportLinesFragment : Fragment(), RoutesAdapter.ToggleListener {
     override fun onDestroyView() {
         super.onDestroyView()
         dismissProgressDialog()
+        selectedPills.clear()
         _binding = null
     }
 
@@ -121,6 +161,86 @@ class TransportLinesFragment : Fragment(), RoutesAdapter.ToggleListener {
         routesAdapter = RoutesAdapter(this)
         binding.transportLinesRecyclerView.adapter = routesAdapter
         binding.transportLinesRecyclerView.layoutManager = LinearLayoutManager(requireContext())
+    }
+
+    private fun setupSearch() {
+        binding.btnSearch.setOnClickListener {
+            val query = binding.routesSearchBar.text.toString()
+            viewModel.search(query)
+        }
+
+        binding.routesSearchBar.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_SEARCH) {
+                val query = binding.routesSearchBar.text.toString()
+                viewModel.search(query)
+                true
+            } else {
+                false
+            }
+        }
+    }
+
+    private fun createPills(colors: Map<RouteTypes, Pair<String, String>>) {
+        val types = RouteTypes.entries.filter { it != RouteTypes.UNKNOWN }
+        val pillLayout = binding.pillLayout
+
+        val px = TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP, 14f, resources.displayMetrics
+        ).toInt()
+        val py = TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP, 6f, resources.displayMetrics
+        ).toInt()
+        val marginEnd = TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP, 6f, resources.displayMetrics
+        ).toInt()
+
+        for (type in types) {
+            val routeColors = colors[type]
+            val bgColor = if (routeColors != null) {
+                DataParsers.parseStringToColor(routeColors.first, false)
+            } else Color.GRAY
+            val textColor = if (routeColors != null) {
+                DataParsers.parseStringToColor(routeColors.second, true)
+            } else Color.WHITE
+
+            val button = Button(requireContext(), null, android.R.attr.buttonStyleSmall).apply {
+                text = type.displayName
+                isAllCaps = false
+                setPadding(px, py, px, py)
+                minWidth = 0
+                minHeight = 0
+                textSize = 13f
+                setOnClickListener {
+                    val nowSelected = !selectedPills.contains(type)
+                    if (nowSelected) selectedPills.add(type) else selectedPills.remove(type)
+                    updatePillStyle(this, bgColor, textColor, nowSelected)
+                    viewModel.toggleType(type)
+                }
+                updatePillStyle(this, bgColor, textColor, false)
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    this.marginEnd = marginEnd
+                }
+            }
+            pillLayout.addView(button)
+        }
+    }
+
+    private fun updatePillStyle(button: Button, bgColor: Int, textColor: Int, selected: Boolean) {
+        val bg = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = pillCornerRadiusPx
+            if (selected) {
+                setColor(bgColor)
+            } else {
+                setColor(Color.TRANSPARENT)
+                setStroke(pillStrokePx, bgColor)
+            }
+        }
+        button.background = bg
+        button.setTextColor(if (selected) textColor else bgColor)
     }
 
     private fun loadStopsForRoute(routeId: String) {
