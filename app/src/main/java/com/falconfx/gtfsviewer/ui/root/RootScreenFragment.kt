@@ -33,6 +33,31 @@ class RootScreenFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         _binding = FragmentRootScreenBinding.bind(view)
 
+        if (childFragmentManager.fragments.isNotEmpty()) {
+            val savedTab = savedInstanceState?.getSerializable(RootScreenViewModel.CURRENT_TAB) as? RootScreenViewModel.Tab
+            val activeTag = savedTab?.tag ?: viewModel.currentTab.value?.tag ?: RootScreenViewModel.Tab.TRANSPORT_LINES.tag
+            currentFragment = childFragmentManager.findFragmentByTag(activeTag)
+
+            childFragmentManager.beginTransaction().apply {
+                for (f in childFragmentManager.fragments) {
+                    if (f == currentFragment) {
+                        show(f)
+                        setMaxLifecycle(f, Lifecycle.State.RESUMED)
+                    } else {
+                        hide(f)
+                        setMaxLifecycle(f, Lifecycle.State.STARTED)
+                    }
+                }
+                commitNow()
+            }
+        }
+
+        binding.bottomNavBar.selectedItemId = when (viewModel.currentTab.value) {
+            RootScreenViewModel.Tab.MAP -> R.id.nav_map
+            RootScreenViewModel.Tab.TRANSPORT_LINES -> R.id.nav_routes
+            else -> R.id.nav_routes
+        }
+
         binding.bottomNavBar.setOnItemSelectedListener { item ->
             when (item.itemId) {
                 R.id.nav_map -> viewModel.switchTab(RootScreenViewModel.Tab.MAP)
@@ -51,13 +76,17 @@ class RootScreenFragment : Fragment() {
         _binding = null
     }
 
-    private fun navigateToTab(tab: RootScreenViewModel.Tab) {
-        val tag = when (tab) {
-            RootScreenViewModel.Tab.MAP -> "OsmMapFragment"
-            RootScreenViewModel.Tab.TRANSPORT_LINES -> "TransportLinesFragment"
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        viewModel.currentTab.value?.let { tab ->
+            outState.putSerializable(RootScreenViewModel.CURRENT_TAB, tab)
         }
+    }
 
-        val existing = childFragmentManager.findFragmentByTag(tag)
+    private fun navigateToTab(tab: RootScreenViewModel.Tab) {
+        if (currentFragment?.tag == tab.tag) return
+
+        val existing = childFragmentManager.findFragmentByTag(tab.tag)
         val target: Fragment = existing ?: when (tab) {
             RootScreenViewModel.Tab.MAP -> OsmMapFragment()
             RootScreenViewModel.Tab.TRANSPORT_LINES -> TransportLinesFragment()
@@ -72,7 +101,7 @@ class RootScreenFragment : Fragment() {
             if (existing != null) {
                 show(target)
             } else {
-                add(R.id.childFragmentContainer, target, tag)
+                add(R.id.childFragmentContainer, target, tab.tag)
             }
             setMaxLifecycle(target, Lifecycle.State.RESUMED)
 

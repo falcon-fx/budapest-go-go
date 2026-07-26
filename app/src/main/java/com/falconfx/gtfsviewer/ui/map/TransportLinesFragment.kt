@@ -91,6 +91,10 @@ class TransportLinesFragment : Fragment(), RoutesAdapter.ToggleListener {
             }
         }
 
+        viewModel.searching.observe(viewLifecycleOwner) { isSearching ->
+            binding.searchProgressBar.visibility = if (isSearching) View.VISIBLE else View.GONE
+        }
+
         binding.btnFetchTimetable.setOnClickListener {
             val hasData = viewModel.routes.value?.isNotEmpty() == true
             val title = if (hasData) R.string.dialog_sync_title else R.string.dialog_download_title

@@ -48,6 +48,9 @@ class TransportLinesViewModel @Inject constructor(
     private val _searchResult = MutableLiveData<SearchResult>()
     val searchResult: LiveData<SearchResult> = _searchResult
 
+    private val _searching = MutableLiveData(false)
+    val searching: LiveData<Boolean> = _searching
+
     private val _typeColors = MutableLiveData<Map<RouteTypes, Pair<String, String>>>()
     val typeColors: LiveData<Map<RouteTypes, Pair<String, String>>> = _typeColors
 
@@ -116,7 +119,9 @@ class TransportLinesViewModel @Inject constructor(
         val query = searchQuery
         val types = selectedTypes
 
+        _searching.postValue(true)
         viewModelScope.launch {
+            val startTime = System.currentTimeMillis()
             var result = allRoutesCache
             var preExpandRouteId: String? = null
 
@@ -127,15 +132,21 @@ class TransportLinesViewModel @Inject constructor(
             if (query.isNotEmpty()) {
                 val typeFilteredIds = result.map { it.id }.toSet()
 
+                val shortNameStart = System.currentTimeMillis()
                 val shortNameRouteIds = allRoutesCache
                     .filter { isRouteNameMatch(it.shortName, query) }
                     .map { it.id }
                     .toSet()
                     .intersect(typeFilteredIds)
+                val shortNameTime = System.currentTimeMillis() - shortNameStart
+                Log.d(logTag, "search: shortName match took ${shortNameTime}ms, matched ${shortNameRouteIds.size} routes")
 
+                val stopNameStart = System.currentTimeMillis()
                 val stopNameRouteIds = timetable.searchRouteIdsByStopName(query)
                     .toSet()
                     .intersect(typeFilteredIds)
+                val stopNameTime = System.currentTimeMillis() - stopNameStart
+                Log.d(logTag, "search: stopName query took ${stopNameTime}ms, matched ${stopNameRouteIds.size} routes")
 
                 val matchedIds = shortNameRouteIds + stopNameRouteIds
                 result = result.filter { it.id in matchedIds }
@@ -145,7 +156,11 @@ class TransportLinesViewModel @Inject constructor(
                 }
             }
 
+            val totalTime = System.currentTimeMillis() - startTime
+            Log.d(logTag, "search: total took ${totalTime}ms, result=${result.size} routes")
+
             _searchResult.postValue(SearchResult(result, preExpandRouteId))
+            _searching.postValue(false)
         }
     }
 

@@ -53,6 +53,15 @@
                 app:layout_constraintBottom_toBottomOf="@id/searchToolbarConstraintLayout"
                 app:layout_constraintStart_toEndOf="@id/btnSearch"
                 android:layout_margin="5dp"/>
+            <ProgressBar
+                android:id="@+id/searchProgressBar"
+                style="?android:attr/progressBarStyleSmall"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:visibility="gone"
+                app:layout_constraintTop_toTopOf="@id/searchToolbarConstraintLayout"
+                app:layout_constraintBottom_toBottomOf="@id/searchToolbarConstraintLayout"
+                app:layout_constraintStart_toEndOf="@id/btnFetchTimetable" />
         </androidx.constraintlayout.widget.ConstraintLayout>
 
 
