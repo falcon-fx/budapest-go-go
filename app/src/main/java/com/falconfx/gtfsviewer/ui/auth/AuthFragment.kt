@@ -2,6 +2,7 @@ package com.falconfx.gtfsviewer.ui.auth
 
 import android.app.Activity
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
@@ -113,14 +114,16 @@ class AuthFragment: Fragment() {
     private fun openFilePicker() {
         val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
             type = "*/*"
-            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf(
-                "application/zip",
-                "application/x-zip-compressed",
-                "application/x-x509-ca-cert",
-                "application/x-pem-file",
-                "text/plain",
-                "application/octet-stream"
-            ))
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+                putExtra(Intent.EXTRA_MIME_TYPES, arrayOf(
+                    "application/zip",
+                    "application/x-zip-compressed",
+                    "application/x-x509-ca-cert",
+                    "application/x-pem-file",
+                    "text/plain",
+                    "application/octet-stream"
+                ))
+            }
             addCategory(Intent.CATEGORY_OPENABLE)
         }
         startActivityForResult(Intent.createChooser(intent, "Select certificate ZIP or PEM"), REQUEST_CODE_PICK_FILE)

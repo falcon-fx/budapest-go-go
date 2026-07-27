@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <dimen name="common_item_padding_s">6dp</dimen>
     <dimen name="common_item_padding">14dp</dimen>
     <dimen name="route_text_headsign_size">14sp</dimen>
     <dimen name="route_text_shortname_size">20sp</dimen>
